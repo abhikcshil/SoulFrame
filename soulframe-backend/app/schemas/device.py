@@ -47,6 +47,7 @@ class DeviceSettingsResponse(BaseModel):
 class MediaManifestItem(BaseModel):
     media_id: UUID4
     download_url: str
+    original_filename: str
 
 
 class PlaylistItemResponse(BaseModel):

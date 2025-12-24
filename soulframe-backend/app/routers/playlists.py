@@ -69,7 +69,7 @@ async def update_playlist(
     return playlist
 
 
-@router.post("/{device_id}/assign/{playlist_id}", status_code=status.HTTP_200_OK)
+@router.post("/devices/{device_id}/assign/{playlist_id}", status_code=status.HTTP_200_OK)
 async def assign_playlist(
     device_id: UUID,
     playlist_id: UUID,

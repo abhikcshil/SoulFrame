@@ -114,6 +114,9 @@ def get_device_state(db: Session, device: Device) -> dict:
     media_manifest = []
     playlist_items = []
     
+    # In get_device_state function, around line 90-100
+# Replace the media_manifest building section:
+
     if assignment:
         playlist = db.query(Playlist).filter(Playlist.id == assignment.playlist_id).first()
         if playlist:
@@ -122,14 +125,18 @@ def get_device_state(db: Session, device: Device) -> dict:
             ).order_by(PlaylistItem.position).all()
             
             for item in items:
-                media_manifest.append(MediaManifestItem(
-                    media_id=item.media_id,
-                    download_url=f"/device/media/{item.media_id}/download"
-                ))
-                playlist_items.append(PlaylistItemResponse(
-                    media_id=item.media_id,
-                    position=item.position
-                ))
+                # Get media details for original_filename
+                media = db.query(Media).filter(Media.id == item.media_id).first()
+                if media:
+                    media_manifest.append(MediaManifestItem(
+                        media_id=item.media_id,
+                        download_url=f"/device/media/{item.media_id}/download",
+                        original_filename=media.original_filename  # Add this
+                    ))
+                    playlist_items.append(PlaylistItemResponse(
+                        media_id=item.media_id,
+                        position=item.position
+                    ))
     
     return {
         "paired": True,

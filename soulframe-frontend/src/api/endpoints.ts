@@ -79,7 +79,7 @@ export const deviceApi = {
   },
 
   assign: async (deviceId: string, playlistId: string): Promise<{ message: string }> => {
-    return apiRequest(`/playlists/${deviceId}/assign/${playlistId}`, {
+    return apiRequest(`/devices/${deviceId}/assign/${playlistId}`, {
       method: 'POST',
     });
   },

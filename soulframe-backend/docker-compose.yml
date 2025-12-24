@@ -1,0 +1,37 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: smartframe
+      POSTGRES_PASSWORD: smartframe
+      POSTGRES_DB: smartframe
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U smartframe"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://smartframe:smartframe@db:5432/smartframe
+      - SECRET_KEY=dev-secret-key-change-in-production-min-32-chars-long
+      - WEB_BASE_URL=http://localhost:3000
+    volumes:
+      - ./app:/app/app
+      - ./data/media:/app/data/media
+      - ./alembic:/app/alembic
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  postgres_data:

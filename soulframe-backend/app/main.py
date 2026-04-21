@@ -1,6 +1,9 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.config import settings
+from app.database import Base, engine
+from app.models import models  # noqa: F401
 from app.routers import auth, devices, device_agent, media, playlists
 
 app = FastAPI(
@@ -12,7 +15,7 @@ app = FastAPI(
 # CORS configuration for local development
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:3001", "http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_origins=settings.cors_origins_list,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -36,6 +39,6 @@ async def health():
     return {"status": "ok"}
 
 
-### data/media/.gitkeep
-
-# This file ensures the media directory is created in git
+@app.on_event("startup")
+async def startup():
+    Base.metadata.create_all(bind=engine)

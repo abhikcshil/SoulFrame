@@ -7,7 +7,7 @@ This README explains how to run the service locally, using Docker, required conf
 ## Overview
 
 - Framework: FastAPI
-- Database: PostgreSQL (SQLAlchemy + Alembic)
+- Database: SQLAlchemy (defaults to SQLite for local dev, supports PostgreSQL)
 - Storage: Local filesystem for media files (configurable)
 
 ## Requirements
@@ -26,7 +26,7 @@ Dependencies are listed in `requirements.txt`.
 
 The app uses pydantic-settings and reads from a `.env` file if present. The important environment variables are:
 
-- `DATABASE_URL` - SQLAlchemy connection string (default: `postgresql://smartframe:smartframe@db:5432/smartframe`).
+- `DATABASE_URL` - SQLAlchemy connection string (default: `sqlite:///./local_test.db`).
 - `SECRET_KEY` - JWT secret. Must be strong and kept secret in production (>= 32 chars recommended).
 - `WEB_BASE_URL` - Frontend URL used when generating claim links (e.g. `http://localhost:3000`).
 - `MEDIA_STORAGE_PATH` - Path where uploaded media are stored (default: `./data/media`).
@@ -35,7 +35,7 @@ The app uses pydantic-settings and reads from a `.env` file if present. The impo
 Example `.env` (create a file named `.env` in the project root):
 
 ```env
-DATABASE_URL=postgresql://smartframe:smartframe@db:5432/smartframe
+DATABASE_URL=sqlite:///./local_test.db
 SECRET_KEY=replace-with-a-long-random-string-of-32-plus-characters
 WEB_BASE_URL=http://localhost:3000
 MEDIA_STORAGE_PATH=./data/media
@@ -60,9 +60,7 @@ pip install -r requirements.txt
 
 3. Create a `.env` file as shown above.
 
-4. Ensure PostgreSQL is reachable via `DATABASE_URL` and run migrations (see Alembic section).
-
-5. Start the app:
+4. Start the app:
 
 ```bash
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
@@ -109,7 +107,7 @@ When running in Docker, you can either run Alembic from the container or run it 
 ## Security & production notes
 
 - Replace the default `SECRET_KEY` and keep it secret (use environment variables / secrets manager).
-- Use HTTPS and configure proper CORS origins for the frontend domain. The current CORS configuration in `app/main.py` allows only `http://localhost:3000` and `http://localhost:3001`.
+- Use HTTPS and configure proper CORS origins for the frontend domain. Local defaults include `http://localhost:5173` and common localhost alternatives.
 - Consider adding rate-limiting (there is a TODO in the upload endpoint), request size limits, and authentication hardening.
 
 ## Recommended next steps

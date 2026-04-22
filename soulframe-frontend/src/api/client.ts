@@ -1,4 +1,9 @@
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+function getDefaultApiBaseUrl() {
+  const hostname = window.location.hostname || 'localhost';
+  return `${window.location.protocol}//${hostname}:8000`;
+}
+
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || getDefaultApiBaseUrl();
 
 export class ApiError extends Error {
   constructor(
@@ -21,21 +26,19 @@ export async function apiRequest<T>(
 ): Promise<T> {
   const { requiresAuth = true, ...fetchOptions } = options;
 
-  const headers: HeadersInit = {
-    ...fetchOptions.headers,
-  };
+  const headers = new Headers(fetchOptions.headers);
 
   // Add auth token if required
   if (requiresAuth) {
     const token = localStorage.getItem('token');
     if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
+      headers.set('Authorization', `Bearer ${token}`);
     }
   }
 
   // Add Content-Type for JSON bodies
   if (fetchOptions.body && typeof fetchOptions.body === 'string') {
-    headers['Content-Type'] = 'application/json';
+    headers.set('Content-Type', 'application/json');
   }
 
   const url = `${API_BASE_URL}${endpoint}`;
@@ -47,7 +50,7 @@ export async function apiRequest<T>(
     });
 
     // Handle 401 Unauthorized
-    if (response.status === 401) {
+    if (response.status === 401 && requiresAuth) {
       localStorage.removeItem('token');
       // Redirect to login with return URL
       const currentPath = window.location.pathname + window.location.search;

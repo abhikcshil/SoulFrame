@@ -12,13 +12,59 @@ export interface Device {
   name: string;
   last_seen_at: string | null;
   created_at: string;
+  state: 'unclaimed' | 'active' | 'offline';
 }
+
+export interface DeviceRuntimeStatus {
+  app_version: string | null;
+  local_ip: string | null;
+  uptime_seconds: number | null;
+  storage_free_bytes: number | null;
+  cache_free_bytes: number | null;
+  current_media_id: string | null;
+  current_playlist_id: string | null;
+  health_status: string | null;
+  last_error: string | null;
+  updated_at: string | null;
+}
+
+export interface DeviceCommandStatus {
+  id: string;
+  command_type: string;
+  status: string;
+  result_status: string | null;
+  result_message: string | null;
+  created_at: string;
+  delivered_at: string | null;
+  acknowledged_at: string | null;
+}
+
+export type DeviceCommandType =
+  | 'refresh_now'
+  | 'restart_playback'
+  | 'clear_cache'
+  | 'reboot_client'
+  | 'unassign_content'
+  | 'run_health_check'
+  | 'debug_message';
 
 export interface Media {
   id: string;
   original_filename: string;
   mime_type: string;
   size_bytes: number;
+  status: 'uploaded' | 'processing' | 'ready' | 'failed';
+  source_storage_key: string | null;
+  playback_storage_key: string | null;
+  original_mime_type: string | null;
+  playback_mime_type: string | null;
+  original_size_bytes: number | null;
+  playback_size_bytes: number | null;
+  width: number | null;
+  height: number | null;
+  duration_seconds: number | null;
+  normalized_at: string | null;
+  processing_error: string | null;
   created_at: string;
 }
 
@@ -81,6 +127,21 @@ export const deviceApi = {
   assign: async (deviceId: string, playlistId: string): Promise<{ message: string }> => {
     return apiRequest(`/devices/${deviceId}/assign/${playlistId}`, {
       method: 'POST',
+    });
+  },
+
+  runtime: async (deviceId: string): Promise<DeviceRuntimeStatus> => {
+    return apiRequest(`/devices/${deviceId}/runtime`);
+  },
+
+  commands: async (deviceId: string): Promise<DeviceCommandStatus[]> => {
+    return apiRequest(`/devices/${deviceId}/commands`);
+  },
+
+  queueCommand: async (deviceId: string, commandType: DeviceCommandType): Promise<DeviceCommandStatus> => {
+    return apiRequest(`/devices/${deviceId}/commands`, {
+      method: 'POST',
+      body: JSON.stringify({ command_type: commandType, payload: {} }),
     });
   },
 };

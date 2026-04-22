@@ -14,6 +14,17 @@ class Settings(BaseSettings):
     # App
     WEB_BASE_URL: str = "http://localhost:5173"
     CORS_ORIGINS: str = "http://localhost:5173,http://127.0.0.1:5173,http://localhost:3000,http://localhost:3001"
+    CORS_ORIGIN_REGEX: str = (
+        r"^https?://("
+        r"localhost|"
+        r"127\.0\.0\.1|"
+        r"0\.0\.0\.0|"
+        r"\[::1\]|"
+        r"10\.\d{1,3}\.\d{1,3}\.\d{1,3}|"
+        r"192\.168\.\d{1,3}\.\d{1,3}|"
+        r"172\.(1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3}"
+        r")(:\d+)?$"
+    )
     MEDIA_STORAGE_PATH: str = "./data/media"
     MAX_FILE_SIZE_MB: int = 50
     ALLOWED_MIME_TYPES: str = "image/jpeg,image/png,image/gif,image/webp,video/mp4,video/quicktime"
@@ -21,6 +32,15 @@ class Settings(BaseSettings):
     # Pairing
     PAIRING_CODE_LENGTH: int = 8
     PAIRING_CODE_EXPIRY_MINUTES: int = 10
+
+    # Device runtime defaults (MVP polling contract)
+    DEVICE_OFFLINE_THRESHOLD_SECONDS: int = 120
+    DEVICE_DEFAULT_POLL_INTERVAL_SECONDS: int = 15
+    DEVICE_DEFAULT_SYNC_INTERVAL_SECONDS: int = 60
+    DEVICE_DEFAULT_CACHE_MAX_BYTES: int = 1073741824  # 1GB
+    DEVICE_DEFAULT_PLAYBACK_MODE: str = "sequential"
+    DEVICE_DEFAULT_FALLBACK_BEHAVIOR: str = "keep_last"
+    DEVICE_COMMAND_DEFAULT_EXPIRY_SECONDS: int = 300
     
     @property
     def allowed_mime_types_list(self) -> List[str]:

@@ -5,6 +5,7 @@ import { Login } from './pages/Login';
 import { Signup } from './pages/Signup';
 import { Claim } from './pages/Claim';
 import { Devices } from './pages/Devices';
+import { DeviceDetail } from './pages/DeviceDetail';
 import { DeviceAssign } from './pages/DeviceAssign';
 import { MediaPage } from './pages/Media';
 import { Playlists } from './pages/Playlists';
@@ -25,6 +26,15 @@ function App() {
             element={
               <ProtectedRoute>
                 <Devices />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/devices/:deviceId"
+            element={
+              <ProtectedRoute>
+                <DeviceDetail />
               </ProtectedRoute>
             }
           />

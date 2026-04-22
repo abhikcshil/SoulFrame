@@ -1,6 +1,13 @@
 import { useState, useEffect, useRef } from 'react';
 import { Layout } from '../components/Layout';
 import { mediaApi, Media } from '../api/endpoints';
+import {
+  formatDuration,
+  formatFileSize,
+  formatResolution,
+  mediaStatusLabel,
+  mediaTypeLabel,
+} from '../utils/media';
 
 export function MediaPage() {
   const [media, setMedia] = useState<Media[]>([]);
@@ -60,10 +67,13 @@ export function MediaPage() {
     }
   };
 
-  const formatFileSize = (bytes: number) => {
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  const metadata = (item: Media) => {
+    const values = [
+      formatResolution(item),
+      formatDuration(item.duration_seconds),
+      formatFileSize(item.playback_size_bytes || item.original_size_bytes || item.size_bytes),
+    ].filter(Boolean);
+    return values.length ? values.join(' / ') : 'Metadata pending';
   };
 
   if (isLoading) {
@@ -80,6 +90,10 @@ export function MediaPage() {
         <h1>Media Library</h1>
 
         {error && <p className="text-error">{error}</p>}
+
+        <div className="info-box">
+          Upload originals here. SoulFrame prepares optimized playback files for devices and only ready media can be added to playlists.
+        </div>
 
         <input
           ref={fileInputRef}
@@ -101,7 +115,7 @@ export function MediaPage() {
           <div className="list-empty">
             <p>No media yet</p>
             <p className="text-secondary">
-              Upload photos and videos to display on your frames
+              Uploaded originals will be optimized before devices can play them.
             </p>
           </div>
         ) : (
@@ -109,12 +123,31 @@ export function MediaPage() {
             {media.map((item) => (
               <div key={item.id} className="media-card">
                 <div className="media-card-content">
-                  <p style={{ fontSize: '12px', wordBreak: 'break-all' }}>
-                    {item.original_filename}
-                  </p>
-                  <p className="text-secondary" style={{ fontSize: '11px', marginTop: '4px' }}>
-                    {formatFileSize(item.size_bytes)}
-                  </p>
+                  <div>
+                    <div className="media-card-title">{item.original_filename}</div>
+                    <div className="media-card-preview">{mediaTypeLabel(item)}</div>
+                  </div>
+
+                  <div>
+                    <div className="media-card-badges">
+                      <span className={`status-pill status-${item.status}`}>
+                        {mediaStatusLabel(item)}
+                      </span>
+                      <span className="media-type-badge">{mediaTypeLabel(item)}</span>
+                    </div>
+                    <div className="metadata-row">
+                      <span>{metadata(item)}</span>
+                    </div>
+                    {item.original_size_bytes && item.playback_size_bytes && (
+                      <div className="metadata-row">
+                        <span>Original {formatFileSize(item.original_size_bytes)}</span>
+                        <span>Playback {formatFileSize(item.playback_size_bytes)}</span>
+                      </div>
+                    )}
+                    {item.status === 'failed' && (
+                      <p className="media-error">{item.processing_error || 'Processing failed.'}</p>
+                    )}
+                  </div>
                 </div>
 
                 <div className="media-card-actions">

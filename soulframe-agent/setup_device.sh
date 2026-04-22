@@ -23,13 +23,14 @@ chmod +x /home/admin/soulframe/device_agent.py
 echo ""
 echo "Creating configuration file..."
 read -p "Enter API base URL (e.g., http://192.168.1.100:8000): " API_URL
-read -p "Enter device token: " DEVICE_TOKEN
+read -p "Enter device display name (e.g., Living Room Frame): " DEVICE_NAME
 
 cat > /home/admin/soulframe/config/device.json <<EOF
 {
   "api_base_url": "$API_URL",
-  "device_token": "$DEVICE_TOKEN",
-  "checkin_interval_seconds": 20
+  "device_name": "$DEVICE_NAME",
+  "app_version": "0.2.0",
+  "poll_interval_seconds": 15
 }
 EOF
 
@@ -69,6 +70,4 @@ echo "To view logs:"
 echo "  sudo journalctl -u soulframe -f"
 echo "  or: tail -f /home/admin/soulframe/logs/agent.log"
 echo ""
-echo "To get device token from backend:"
-echo "  docker compose exec db psql -U smartframe -d smartframe"
-echo "  Then run: SELECT device_token FROM devices WHERE name='Your Device Name';"
+echo "The agent auto-registers with backend on first start and persists device_id/token."

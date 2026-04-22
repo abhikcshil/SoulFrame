@@ -1,8 +1,9 @@
 from sqlalchemy.orm import Session
 from uuid import UUID
 
-from app.models.models import Playlist, PlaylistItem, DeviceAssignment, Device
+from app.models.models import Playlist, PlaylistItem, DeviceAssignment, Device, Media
 from app.schemas.playlist import PlaylistItemInput
+from app.services.media_processing import READY
 
 
 def create_playlist(db: Session, user_id: UUID, name: str) -> Playlist:
@@ -43,6 +44,19 @@ def update_playlist(
 def get_user_playlists(db: Session, user_id: UUID) -> list[Playlist]:
     """Get all playlists for a user"""
     return db.query(Playlist).filter(Playlist.owner_user_id == user_id).all()
+
+
+def get_unready_playlist_media(db: Session, playlist_id: UUID) -> list[Media]:
+    """Return playlist media that cannot be sent to a device yet."""
+    return (
+        db.query(Media)
+        .join(PlaylistItem, PlaylistItem.media_id == Media.id)
+        .filter(
+            PlaylistItem.playlist_id == playlist_id,
+            (Media.status != READY) | (Media.playback_storage_key.is_(None)),
+        )
+        .all()
+    )
 
 
 def assign_playlist_to_device(db: Session, device: Device, playlist_id: UUID) -> DeviceAssignment:

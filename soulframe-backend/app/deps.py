@@ -41,6 +41,7 @@ async def get_current_user(
 
 async def get_current_device(
     x_device_token: Optional[str] = Header(None),
+    x_device_id: Optional[str] = Header(None),
     db: Session = Depends(get_db)
 ) -> Device:
     """Validate device token and return current device"""
@@ -56,5 +57,19 @@ async def get_current_device(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid device token"
         )
+
+    if x_device_id:
+        try:
+            requested_id = UUID(x_device_id)
+        except ValueError:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid X-Device-Id header"
+            )
+        if requested_id != device.id:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Device ID does not match token"
+            )
     
     return device

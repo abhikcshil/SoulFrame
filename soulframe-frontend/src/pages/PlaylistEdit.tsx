@@ -2,6 +2,14 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Layout } from '../components/Layout';
 import { playlistApi, mediaApi, Playlist, Media } from '../api/endpoints';
+import {
+  formatDuration,
+  formatResolution,
+  isMediaReady,
+  mediaStatusLabel,
+  mediaTypeLabel,
+  mediaUnavailableReason,
+} from '../utils/media';
 
 export function PlaylistEdit() {
   const { playlistId } = useParams<{ playlistId: string }>();
@@ -66,6 +74,11 @@ export function PlaylistEdit() {
 
   const handleAddMedia = (mediaId: string) => {
     if (!playlist) return;
+    const media = allMedia.find((item) => item.id === mediaId);
+    if (!isMediaReady(media)) {
+      setError(media ? mediaUnavailableReason(media) || 'Media is not ready.' : 'Media is not available.');
+      return;
+    }
 
     const newItem = {
       id: `temp-${Date.now()}`,
@@ -119,7 +132,11 @@ export function PlaylistEdit() {
     return media?.original_filename || 'Unknown';
   };
 
-  const availableMedia = allMedia.filter(
+  const getMedia = (mediaId: string) => allMedia.find((m) => m.id === mediaId);
+
+  const selectedUnreadyCount = playlist?.items.filter((item) => !isMediaReady(getMedia(item.media_id))).length || 0;
+
+  const mediaCandidates = allMedia.filter(
     (m) => !playlist?.items.some((item) => item.media_id === m.id)
   );
 
@@ -155,6 +172,10 @@ export function PlaylistEdit() {
 
         {error && <p className="text-error">{error}</p>}
 
+        <div className="info-box">
+          Playlists can use ready media only. Processing or failed uploads stay visible in your library but cannot be sent to devices.
+        </div>
+
         <div className="form-group mb-24">
           <label htmlFor="name" className="form-label">
             Playlist Name
@@ -186,6 +207,27 @@ export function PlaylistEdit() {
                   <div className="text-secondary" style={{ fontSize: '12px' }}>
                     Position {index + 1}
                   </div>
+                  {getMedia(item.media_id) && (
+                    <div className="metadata-row">
+                      <span className={`status-pill status-${getMedia(item.media_id)!.status}`}>
+                        {mediaStatusLabel(getMedia(item.media_id)!)}
+                      </span>
+                      <span>{mediaTypeLabel(getMedia(item.media_id)!)}</span>
+                      {formatResolution(getMedia(item.media_id)!) && (
+                        <span>{formatResolution(getMedia(item.media_id)!)}</span>
+                      )}
+                      {formatDuration(getMedia(item.media_id)!.duration_seconds) && (
+                        <span>{formatDuration(getMedia(item.media_id)!.duration_seconds)}</span>
+                      )}
+                    </div>
+                  )}
+                  {!isMediaReady(getMedia(item.media_id)) && (
+                    <p className="media-error">
+                      {getMedia(item.media_id)
+                        ? mediaUnavailableReason(getMedia(item.media_id)!)
+                        : 'This media is no longer available.'}
+                    </p>
+                  )}
                 </div>
 
                 <div className="playlist-item-controls">
@@ -217,7 +259,13 @@ export function PlaylistEdit() {
           </div>
         )}
 
-        <button onClick={handleSave} className="btn btn-primary" disabled={isSaving}>
+        {selectedUnreadyCount > 0 && (
+          <p className="text-error mb-24">
+            Remove {selectedUnreadyCount} not-ready item{selectedUnreadyCount === 1 ? '' : 's'} before saving this playlist.
+          </p>
+        )}
+
+        <button onClick={handleSave} className="btn btn-primary" disabled={isSaving || selectedUnreadyCount > 0}>
           {isSaving ? 'Saving...' : 'Save Playlist'}
         </button>
 
@@ -236,19 +284,29 @@ export function PlaylistEdit() {
               </div>
 
               <div className="modal-body">
-                {availableMedia.length === 0 ? (
-                  <p className="text-secondary text-center">No available media</p>
+                {mediaCandidates.length === 0 ? (
+                  <p className="text-secondary text-center">No media available to add</p>
                 ) : (
                   <div className="gap-8">
-                    {availableMedia.map((media) => (
+                    {mediaCandidates.map((media) => {
+                      const ready = isMediaReady(media);
+                      return (
                       <div
                         key={media.id}
-                        className="card card-clickable"
-                        onClick={() => handleAddMedia(media.id)}
+                        className={`card ${ready ? 'card-clickable' : 'card-disabled'}`}
+                        onClick={() => ready && handleAddMedia(media.id)}
                       >
-                        <div style={{ fontSize: '14px' }}>{media.original_filename}</div>
+                        <div style={{ fontSize: '14px', fontWeight: 600 }}>{media.original_filename}</div>
+                        <div className="metadata-row">
+                          <span className={`status-pill status-${media.status}`}>{mediaStatusLabel(media)}</span>
+                          <span>{mediaTypeLabel(media)}</span>
+                          {formatResolution(media) && <span>{formatResolution(media)}</span>}
+                          {formatDuration(media.duration_seconds) && <span>{formatDuration(media.duration_seconds)}</span>}
+                        </div>
+                        {!ready && <p className="media-error">{mediaUnavailableReason(media)}</p>}
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>

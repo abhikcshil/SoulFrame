@@ -1,143 +1,123 @@
 # SoulFrame Backend
 
-This repository contains the FastAPI backend for the SoulFrame / Smart Frame project.
+FastAPI + SQLAlchemy backend for SoulFrame.
 
-This README explains how to run the service locally, using Docker, required configuration, migrations, and important security notes.
+## Local Development
 
-## Overview
-
-- Framework: FastAPI
-- Database: SQLAlchemy (defaults to SQLite for local dev, supports PostgreSQL)
-- Storage: Local filesystem for media files (configurable)
-
-## Requirements
-
-- Python 3.11
-- `pip` (or use Docker)
-- PostgreSQL (or use the included `docker-compose.yml` service)
-
-Dependencies are listed in `requirements.txt`.
-
-## Important repository notes
-
-- There's a file named `DockerFile` in the repository. Docker expects a file named `Dockerfile` (lowercase 'f'). Either rename `DockerFile` → `Dockerfile` before building, or specify a custom Dockerfile name when running `docker build`.
-
-## Configuration (env vars)
-
-The app uses pydantic-settings and reads from a `.env` file if present. The important environment variables are:
-
-- `DATABASE_URL` - SQLAlchemy connection string (default: `sqlite:///./local_test.db`).
-- `SECRET_KEY` - JWT secret. Must be strong and kept secret in production (>= 32 chars recommended).
-- `WEB_BASE_URL` - Frontend URL used when generating claim links (e.g. `http://localhost:3000`).
-- `MEDIA_STORAGE_PATH` - Path where uploaded media are stored (default: `./data/media`).
-- `ACCESS_TOKEN_EXPIRE_MINUTES` - JWT expiry in minutes.
-
-Example `.env` (create a file named `.env` in the project root):
-
-```env
-DATABASE_URL=sqlite:///./local_test.db
-SECRET_KEY=replace-with-a-long-random-string-of-32-plus-characters
-WEB_BASE_URL=http://localhost:3000
-MEDIA_STORAGE_PATH=./data/media
-ACCESS_TOKEN_EXPIRE_MINUTES=60
-```
-
-## Running locally (without Docker)
-
-1. Create and activate a virtual environment:
+1. Create and activate virtualenv.
+2. Install dependencies.
+3. Install `ffmpeg` and `ffprobe` locally; video uploads are normalized with these command-line tools.
+4. Run API.
 
 ```bash
 python -m venv .venv
-.venv/Scripts/activate   # Windows
-source .venv/bin/activate  # macOS / Linux
-```
-
-2. Install dependencies:
-
-```bash
+.venv/Scripts/activate  # Windows
 pip install -r requirements.txt
-```
-
-3. Create a `.env` file as shown above.
-
-4. Start the app:
-
-```bash
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-The API root will be available at `http://localhost:8000/` and interactive docs at `http://localhost:8000/docs`.
+Defaults are local-dev friendly:
 
-## Running with Docker Compose (recommended for quick setup)
+- `DATABASE_URL=sqlite:///./local_test.db`
+- CORS allows `http://localhost:5173` and common localhost variants
 
-1. Rename `DockerFile` → `Dockerfile` if you haven't already.
+## Key Environment Variables
 
-2. Build and start the stack:
+- `DATABASE_URL`
+- `SECRET_KEY`
+- `WEB_BASE_URL`
+- `MEDIA_STORAGE_PATH`
+- `DEVICE_DEFAULT_POLL_INTERVAL_SECONDS`
+- `DEVICE_DEFAULT_SYNC_INTERVAL_SECONDS`
+- `DEVICE_DEFAULT_CACHE_MAX_BYTES`
+- `DEVICE_COMMAND_DEFAULT_EXPIRY_SECONDS`
 
-```bash
-docker compose up --build
-```
+## Media Normalization Lifecycle
 
-This `docker-compose.yml` includes a `db` Postgres service and an `api` service. The compose file also mounts `./data/media` into the container; ensure this directory exists and is writable.
+SoulFrame stores user uploads as source assets and separately creates device-safe playback assets.
 
-## Alembic / Database migrations
+- `upload`: the original file is stored under `original/` and a media row is created.
+- `processing`: the backend creates a playback rendition. Videos are converted to MP4/H.264/AAC/yuv420p, capped at 1080p, with `+faststart`. Images are preserved as playback copies for now.
+- `ready`: `playback_storage_key`, playback MIME type, playback size, dimensions, duration, and normalization metadata are saved when available.
+- `failed`: the original upload remains stored, `processing_error` explains the failure, and the item is blocked from device assignment/playback.
 
-Alembic is included in `alembic/`. The project uses `alembic/env.py` which reads `DATABASE_URL` from the app settings.
+Devices never consume raw uploads. `/device/sync` only returns `ready` media with playback metadata and `/device/media/{media_id}/download` serves `playback_storage_key`.
 
-If you don't have an `alembic.ini` in the repo root, run Alembic commands with an explicit config or create a minimal `alembic.ini` file. Typical commands:
+MVP limitation: processing runs synchronously inside the upload request. The normalization logic is centralized in `app/services/media_processing.py` so a future worker can call the same processing entry point.
 
-```bash
-alembic revision --autogenerate -m "describe change"
-alembic upgrade head
-```
+## Device API (MVP Contract)
 
-When running in Docker, you can either run Alembic from the container or run it from your host pointing to the containerized database.
+Device auth is fully separate from user auth.
 
-## Storage / media files
+- User auth: JWT bearer tokens (`/auth/*`)
+- Device auth: `X-Device-Token: <token>` and optional `X-Device-Id: <uuid>`
 
-- Media files are stored on-disk at the path configured by `MEDIA_STORAGE_PATH` (default `./data/media`).
-- The app ensures the directory exists when saving files, and Dockerfile/compose mounts `./data/media` to persist uploads between container restarts.
+### 1. Device registration and claim
 
-## API highlights
+- `POST /device/register`
+  - Creates permanent `device_id` and `device_token`
+- `POST /device/pair/request` (device-auth)
+  - Returns pairing code + claim URL
+- `POST /devices/claim` (user-auth)
+  - Claims device to user account
 
-- Authentication: JWT via `/auth/login` and `/auth/signup` routes.
-- Device checkin & media download endpoints are under `/device` and require a device token header (`X-Device-Token`).
-- Media upload endpoint: `POST /media/upload` (multipart file upload). Allowed MIME types and max file size are configurable in `app/config.py`.
+### 2. Poll/sync
 
-## Security & production notes
+- `POST /device/sync` (device-auth)
+  - Supports initial sync and recurring sync
+  - Request includes optional telemetry and known revisions:
+    - `known_content_revision`
+    - `known_config_revision`
+  - Response returns:
+    - `has_changes`, `content_changed`, `config_changed`
+    - `assigned_content` (with file metadata + download URLs)
+    - `runtime_config`
+    - `pending_commands`
+- `POST /device/checkin` is kept as a compatibility alias to `/device/sync`
 
-- Replace the default `SECRET_KEY` and keep it secret (use environment variables / secrets manager).
-- Use HTTPS and configure proper CORS origins for the frontend domain. Local defaults include `http://localhost:5173` and common localhost alternatives.
-- Consider adding rate-limiting (there is a TODO in the upload endpoint), request size limits, and authentication hardening.
+### 3. Heartbeat
 
-## Recommended next steps
+- `POST /device/heartbeat` (device-auth)
+  - Updates runtime status: app version, IP, uptime, free space, health, last error, currently playing IDs
+  - Returns current state + poll interval hint
 
-1. Rename `DockerFile` → `Dockerfile`.
-2. Create a `.env` or inject env vars in your deployment environment with a proper `SECRET_KEY`.
-3. Run Alembic migrations to create the DB schema:
+### 4. Commands (poll-friendly queue)
 
-```bash
-# Example (host machine running alembic against the running DB)
-DATABASE_URL=postgresql://smartframe:smartframe@localhost:5432/smartframe alembic upgrade head
-```
+- Queue command from dashboard:
+  - `POST /devices/{device_id}/commands` (user-auth)
+- List recent command statuses:
+  - `GET /devices/{device_id}/commands` (user-auth)
+- Device receives pending commands in `/device/sync`
+- Device acknowledges completion:
+  - `POST /device/commands/{command_id}/ack` (device-auth)
 
-4. Add monitoring, logging, and backups for storage and database for production.
+Supported command types:
 
-## Where I looked
+- `refresh_now`
+- `restart_playback`
+- `clear_cache`
+- `reboot_client`
+- `unassign_content`
+- `run_health_check`
+- `debug_message`
 
-- `requirements.txt`
-- `DockerFile` (note the capitalization difference)
-- `docker-compose.yml`
-- `app/main.py`, `app/config.py`, `app/database.py`, `app/deps.py`
-- `app/models/`, `app/routers/`, `app/services/`, `app/utils/`
-- `alembic/env.py`
+### 5. Config retrieval
 
-If you'd like, I can also:
+- `GET /device/config` (device-auth)
+- Also included in `/device/sync` response with `config_revision`
 
-- Rename `DockerFile` → `Dockerfile` for you and update the todo list.
-- Add a `.env.example` file.
-- Add a minimal `alembic.ini` template and a script to run migrations in Docker.
+### 6. Media download
 
----
+- `GET /device/media/{media_id}/download` (device-auth)
+  - Access is restricted to currently assigned content
+  - Includes ETag header for cache validation support
 
-If you want any of those changes applied now, tell me which one and I will update the repo.
+### 7. Device telemetry for dashboard
+
+- `GET /devices/{device_id}/runtime` (user-auth)
+  - Returns latest runtime heartbeat/status snapshot
+
+## Notes
+
+- MVP transport is polling; response models are designed to be reused by future long-poll/SSE/websocket delivery.
+- Offline playback behavior is device-side; backend supplies stable assignment metadata and checksums so device can keep cached content unless revisions change.

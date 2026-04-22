@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Layout } from '../components/Layout';
 import { deviceApi, Device } from '../api/endpoints';
+import { formatRelativeTime, isDeviceOnline } from '../utils/device';
 
 export function Devices() {
   const [devices, setDevices] = useState<Device[]>([]);
@@ -47,27 +48,6 @@ export function Devices() {
   const handleCancel = () => {
     setEditingId(null);
     setEditName('');
-  };
-
-  const isOnline = (lastSeen: string | null) => {
-    if (!lastSeen) return false;
-    const diff = Date.now() - new Date(lastSeen).getTime();
-    return diff < 60000; // 60 seconds
-  };
-
-  const formatLastSeen = (lastSeen: string | null) => {
-    if (!lastSeen) return 'Never';
-
-    const diff = Date.now() - new Date(lastSeen).getTime();
-    const seconds = Math.floor(diff / 1000);
-    const minutes = Math.floor(seconds / 60);
-    const hours = Math.floor(minutes / 60);
-    const days = Math.floor(hours / 24);
-
-    if (seconds < 60) return 'Just now';
-    if (minutes < 60) return `${minutes}m ago`;
-    if (hours < 24) return `${hours}h ago`;
-    return `${days}d ago`;
   };
 
   if (isLoading) {
@@ -134,7 +114,10 @@ export function Devices() {
                     >
                       <h3 style={{ margin: 0 }}>{device.name}</h3>
                       <button
-                        onClick={() => handleEdit(device)}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          handleEdit(device);
+                        }}
                         className="btn btn-small btn-secondary"
                       >
                         Edit
@@ -151,15 +134,22 @@ export function Devices() {
                     >
                       <span
                         className={`status-dot ${
-                          isOnline(device.last_seen_at) ? 'status-online' : 'status-offline'
+                          isDeviceOnline(device) ? 'status-online' : 'status-offline'
                         }`}
                       ></span>
                       <span className="text-secondary">
-                        {isOnline(device.last_seen_at)
+                        {isDeviceOnline(device)
                           ? 'Online'
-                          : `Last seen ${formatLastSeen(device.last_seen_at)}`}
+                          : `Last seen ${formatRelativeTime(device.last_seen_at)}`}
                       </span>
                     </div>
+
+                    <button
+                      onClick={() => navigate(`/devices/${device.id}`)}
+                      className="btn btn-primary mb-24"
+                    >
+                      Runtime Monitor
+                    </button>
 
                     <button
                       onClick={() => navigate(`/devices/${device.id}/assign`)}

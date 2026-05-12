@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     CORS_ORIGIN_REGEX: str = (
         r"^https?://("
         r"localhost|"
+        r"[\w-]+\.local|"
         r"127\.0\.0\.1|"
         r"0\.0\.0\.0|"
         r"\[::1\]|"

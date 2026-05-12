@@ -110,9 +110,19 @@ class DeviceRuntimeStatusResponse(BaseModel):
     cache_free_bytes: Optional[int]
     current_media_id: Optional[UUID4]
     current_playlist_id: Optional[UUID4]
+    device_state: Optional[str] = None
+    temperature_c: Optional[float] = None
+    cpu_frequency_mhz: Optional[float] = None
+    dropped_frames: Optional[int] = None
+    playback_errors: Optional[int] = None
+    recent_logs: list[str] = Field(default_factory=list)
     health_status: Optional[str]
     last_error: Optional[str]
     updated_at: Optional[datetime]
+    assignment_type: Literal["none", "media", "playlist"] = "none"
+    assigned_media_id: Optional[UUID4] = None
+    assigned_playlist_id: Optional[UUID4] = None
+    assigned_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True
@@ -126,6 +136,12 @@ class DeviceHeartbeatRequest(BaseModel):
     cache_free_bytes: Optional[int] = None
     current_media_id: Optional[UUID4] = None
     current_playlist_id: Optional[UUID4] = None
+    device_state: Optional[str] = None
+    temperature_c: Optional[float] = None
+    cpu_frequency_mhz: Optional[float] = None
+    dropped_frames: Optional[int] = None
+    playback_errors: Optional[int] = None
+    recent_logs: Optional[list[str]] = None
     health_status: Optional[str] = None
     last_error: Optional[str] = None
 
@@ -145,6 +161,12 @@ class DeviceSyncRequest(BaseModel):
     cache_free_bytes: Optional[int] = None
     current_media_id: Optional[UUID4] = None
     current_playlist_id: Optional[UUID4] = None
+    device_state: Optional[str] = None
+    temperature_c: Optional[float] = None
+    cpu_frequency_mhz: Optional[float] = None
+    dropped_frames: Optional[int] = None
+    playback_errors: Optional[int] = None
+    recent_logs: Optional[list[str]] = None
     health_status: Optional[str] = None
     last_error: Optional[str] = None
     known_content_revision: Optional[str] = None
@@ -166,8 +188,9 @@ class AssignedMediaFile(BaseModel):
 
 
 class AssignedContentResponse(BaseModel):
-    assignment_type: Literal["none", "playlist"]
+    assignment_type: Literal["none", "media", "playlist"]
     assigned_playlist_id: Optional[UUID4]
+    assigned_media_id: Optional[UUID4] = None
     content_revision: str
     assigned_at: Optional[datetime]
     items: list[AssignedMediaFile]

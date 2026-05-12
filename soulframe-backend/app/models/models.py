@@ -65,6 +65,7 @@ class Media(Base):
     
     owner = relationship("User", back_populates="media")
     playlist_items = relationship("PlaylistItem", back_populates="media")
+    direct_assignments = relationship("DeviceAssignment", back_populates="media")
 
 
 class Playlist(Base):
@@ -97,11 +98,13 @@ class DeviceAssignment(Base):
     
     id = Column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
     device_id = Column(Uuid(as_uuid=True), ForeignKey("devices.id", ondelete="CASCADE"), nullable=False, unique=True, index=True)
-    playlist_id = Column(Uuid(as_uuid=True), ForeignKey("playlists.id", ondelete="CASCADE"), nullable=False, index=True)
+    playlist_id = Column(Uuid(as_uuid=True), ForeignKey("playlists.id", ondelete="CASCADE"), nullable=True, index=True)
+    media_id = Column(Uuid(as_uuid=True), ForeignKey("media.id", ondelete="CASCADE"), nullable=True, index=True)
     assigned_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     
     device = relationship("Device", back_populates="assignment")
     playlist = relationship("Playlist", back_populates="assignments")
+    media = relationship("Media", back_populates="direct_assignments")
 
 
 class DeviceSettings(Base):
@@ -131,6 +134,12 @@ class DeviceRuntimeStatus(Base):
     cache_free_bytes = Column(BigInteger, nullable=True)
     current_media_id = Column(Uuid(as_uuid=True), ForeignKey("media.id", ondelete="SET NULL"), nullable=True)
     current_playlist_id = Column(Uuid(as_uuid=True), ForeignKey("playlists.id", ondelete="SET NULL"), nullable=True)
+    device_state = Column(String(50), nullable=True)
+    temperature_c = Column(Float, nullable=True)
+    cpu_frequency_mhz = Column(Float, nullable=True)
+    dropped_frames = Column(Integer, nullable=True)
+    playback_errors = Column(Integer, nullable=True)
+    recent_logs = Column(JSON, nullable=True)
     health_status = Column(String(50), nullable=True)
     last_error = Column(Text, nullable=True)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)

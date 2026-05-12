@@ -119,6 +119,24 @@ export function DeviceDetail() {
     [playlists, runtime?.current_playlist_id]
   );
 
+  const assignedMedia = useMemo(
+    () => media.find((item) => item.id === runtime?.assigned_media_id),
+    [media, runtime?.assigned_media_id]
+  );
+
+  const assignedPlaylist = useMemo(
+    () => playlists.find((item) => item.id === runtime?.assigned_playlist_id),
+    [playlists, runtime?.assigned_playlist_id]
+  );
+
+  const assignedContentLabel = useMemo(() => {
+    if (!runtime || runtime.assignment_type === 'none') return 'None';
+    if (runtime.assignment_type === 'media') {
+      return assignedMedia?.original_filename || runtime.assigned_media_id || 'Direct media';
+    }
+    return assignedPlaylist?.name || runtime.assigned_playlist_id || 'Playlist';
+  }, [assignedMedia, assignedPlaylist, runtime]);
+
   const handleCommand = async (commandType: DeviceCommandType) => {
     if (!deviceId) return;
     setQueuedCommand(commandType);
@@ -188,11 +206,15 @@ export function DeviceDetail() {
 
         <section className="card">
           <h3>Playback</h3>
+          <DetailRow label="Assigned content" value={assignedContentLabel} />
+          <DetailRow label="Assigned at" value={formatRelativeTime(runtime?.assigned_at)} />
           <DetailRow label="Health" value={runtimeHealthLabel(runtime)} />
+          <DetailRow label="Device state" value={runtime?.device_state || runtimeState} />
           <DetailRow label="Current playlist" value={currentPlaylist?.name || runtime?.current_playlist_id || 'Unknown'} />
           <DetailRow label="Current media" value={currentMedia?.original_filename || runtime?.current_media_id || 'Unknown'} />
           <DetailRow label="Last error" value={runtime?.last_error || 'None'} />
-          <DetailRow label="Content revision" value="Not exposed to dashboard yet" />
+          <DetailRow label="Playback errors" value={runtime?.playback_errors == null ? 'Unknown' : String(runtime.playback_errors)} />
+          <DetailRow label="Dropped frames" value={runtime?.dropped_frames == null ? 'Unknown' : String(runtime.dropped_frames)} />
         </section>
 
         <section className="card">
@@ -205,6 +227,8 @@ export function DeviceDetail() {
           <DetailRow label="Uptime" value={formatUptime(runtime?.uptime_seconds)} />
           <DetailRow label="Media storage free" value={formatStorage(runtime?.storage_free_bytes)} />
           <DetailRow label="Cache free" value={formatStorage(runtime?.cache_free_bytes)} />
+          <DetailRow label="Temperature" value={runtime?.temperature_c == null ? 'Unknown' : `${runtime.temperature_c.toFixed(1)} C`} />
+          <DetailRow label="CPU frequency" value={runtime?.cpu_frequency_mhz == null ? 'Unknown' : `${Math.round(runtime.cpu_frequency_mhz)} MHz`} />
         </section>
 
         <section className="card">
@@ -221,6 +245,15 @@ export function DeviceDetail() {
               </button>
             ))}
           </div>
+        </section>
+
+        <section className="card">
+          <h3>Recent Device Logs</h3>
+          {!runtime?.recent_logs?.length ? (
+            <p className="text-secondary">No log lines reported yet</p>
+          ) : (
+            <pre className="log-tail">{runtime.recent_logs.slice(-12).join('\n')}</pre>
+          )}
         </section>
 
         <section className="card">
@@ -249,7 +282,7 @@ export function DeviceDetail() {
         </section>
 
         <button onClick={() => navigate(`/devices/${device.id}/assign`)} className="btn btn-primary">
-          Assign Playlist
+          Assign Content
         </button>
       </div>
     </Layout>

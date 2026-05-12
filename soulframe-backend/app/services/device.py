@@ -199,6 +199,18 @@ def update_runtime_status(db: Session, device: Device, status: DeviceHeartbeatRe
         runtime_status.current_media_id = status.current_media_id
     if status.current_playlist_id is not None:
         runtime_status.current_playlist_id = status.current_playlist_id
+    if status.device_state is not None:
+        runtime_status.device_state = status.device_state
+    if status.temperature_c is not None:
+        runtime_status.temperature_c = status.temperature_c
+    if status.cpu_frequency_mhz is not None:
+        runtime_status.cpu_frequency_mhz = status.cpu_frequency_mhz
+    if status.dropped_frames is not None:
+        runtime_status.dropped_frames = status.dropped_frames
+    if status.playback_errors is not None:
+        runtime_status.playback_errors = status.playback_errors
+    if status.recent_logs is not None:
+        runtime_status.recent_logs = status.recent_logs[-50:]
     if status.health_status is not None:
         runtime_status.health_status = status.health_status
     if status.last_error is not None:
@@ -224,6 +236,28 @@ def get_runtime_config(device: Device) -> DeviceRuntimeConfigResponse:
     )
 
 
+def _media_to_assigned_file(media: Media, api_base_url: str) -> AssignedMediaFile:
+    playback_key = media.playback_storage_key or media.filename
+    playback_mime_type = media.playback_mime_type or media.mime_type
+    playback_size_bytes = media.playback_size_bytes or media.size_bytes
+    checksum_seed = (
+        f"{media.id}|{playback_key}|{playback_size_bytes}|{media.normalized_at.isoformat() if media.normalized_at else ''}"
+    )
+    checksum = sha256(checksum_seed.encode("utf-8")).hexdigest()
+    return AssignedMediaFile(
+        media_id=media.id,
+        original_filename=media.original_filename,
+        mime_type=playback_mime_type,
+        size_bytes=playback_size_bytes,
+        width=media.width,
+        height=media.height,
+        duration_seconds=media.duration_seconds,
+        checksum=checksum,
+        updated_at=media.normalized_at or media.created_at,
+        download_url=f"{api_base_url}/device/media/{media.id}/download",
+    )
+
+
 def _build_content_items(db: Session, assignment: DeviceAssignment, api_base_url: str) -> tuple[list[AssignedMediaFile], str]:
     playlist = db.query(Playlist).filter(Playlist.id == assignment.playlist_id).first()
     if not playlist:
@@ -244,28 +278,9 @@ def _build_content_items(db: Session, assignment: DeviceAssignment, api_base_url
     items: list[AssignedMediaFile] = []
     revision_bits: list[str] = [str(playlist.id), assignment.assigned_at.isoformat() if assignment.assigned_at else ""]
     for item, media in playlist_items:
-        playback_key = media.playback_storage_key or media.filename
-        playback_mime_type = media.playback_mime_type or media.mime_type
-        playback_size_bytes = media.playback_size_bytes or media.size_bytes
-        checksum_seed = (
-            f"{media.id}|{playback_key}|{playback_size_bytes}|{media.normalized_at.isoformat() if media.normalized_at else ''}"
-        )
-        checksum = sha256(checksum_seed.encode("utf-8")).hexdigest()
-        revision_bits.append(f"{item.position}:{media.id}:{checksum}")
-        items.append(
-            AssignedMediaFile(
-                media_id=media.id,
-                original_filename=media.original_filename,
-                mime_type=playback_mime_type,
-                size_bytes=playback_size_bytes,
-                width=media.width,
-                height=media.height,
-                duration_seconds=media.duration_seconds,
-                checksum=checksum,
-                updated_at=media.normalized_at or media.created_at,
-                download_url=f"{api_base_url}/device/media/{media.id}/download",
-            )
-        )
+        assigned_file = _media_to_assigned_file(media, api_base_url)
+        revision_bits.append(f"{item.position}:{media.id}:{assigned_file.checksum}")
+        items.append(assigned_file)
 
     revision = sha256("|".join(revision_bits).encode("utf-8")).hexdigest()[:16]
     return items, revision
@@ -277,15 +292,52 @@ def get_assigned_content(db: Session, device: Device, api_base_url: str) -> Assi
         return AssignedContentResponse(
             assignment_type="none",
             assigned_playlist_id=None,
+            assigned_media_id=None,
             content_revision="none",
             assigned_at=None,
             items=[],
+        )
+
+    if assignment.media_id:
+        media = (
+            db.query(Media)
+            .filter(
+                Media.id == assignment.media_id,
+                Media.status == READY,
+                Media.playback_storage_key.isnot(None),
+            )
+            .first()
+        )
+        if not media:
+            revision = sha256(
+                f"media-missing|{assignment.media_id}|{assignment.assigned_at.isoformat() if assignment.assigned_at else ''}".encode("utf-8")
+            ).hexdigest()[:16]
+            return AssignedContentResponse(
+                assignment_type="media",
+                assigned_playlist_id=None,
+                assigned_media_id=assignment.media_id,
+                content_revision=revision,
+                assigned_at=assignment.assigned_at,
+                items=[],
+            )
+        assigned_file = _media_to_assigned_file(media, api_base_url)
+        revision = sha256(
+            f"media|{media.id}|{assigned_file.checksum}|{assignment.assigned_at.isoformat() if assignment.assigned_at else ''}".encode("utf-8")
+        ).hexdigest()[:16]
+        return AssignedContentResponse(
+            assignment_type="media",
+            assigned_playlist_id=None,
+            assigned_media_id=media.id,
+            content_revision=revision,
+            assigned_at=assignment.assigned_at,
+            items=[assigned_file],
         )
 
     items, revision = _build_content_items(db, assignment, api_base_url)
     return AssignedContentResponse(
         assignment_type="playlist",
         assigned_playlist_id=assignment.playlist_id,
+        assigned_media_id=None,
         content_revision=revision,
         assigned_at=assignment.assigned_at,
         items=items,
@@ -449,6 +501,18 @@ def can_device_access_media(db: Session, device: Device, media_id) -> bool:
     assignment = device.assignment
     if not assignment:
         return False
+
+    if assignment.media_id == media_id:
+        direct_media = (
+            db.query(Media)
+            .filter(
+                Media.id == media_id,
+                Media.status == READY,
+                Media.playback_storage_key.isnot(None),
+            )
+            .first()
+        )
+        return direct_media is not None
 
     playlist_item = (
         db.query(PlaylistItem)

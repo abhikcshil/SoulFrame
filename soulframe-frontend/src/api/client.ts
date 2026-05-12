@@ -3,7 +3,33 @@ function getDefaultApiBaseUrl() {
   return `${window.location.protocol}//${hostname}:8000`;
 }
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || getDefaultApiBaseUrl();
+function resolveApiBaseUrl() {
+  const configured = import.meta.env.VITE_API_BASE_URL;
+  const pageHost = window.location.hostname || 'localhost';
+  if (!configured) {
+    return getDefaultApiBaseUrl();
+  }
+
+  try {
+    const configuredUrl = new URL(configured);
+    const configuredIsLocalhost = configuredUrl.hostname === 'localhost' || configuredUrl.hostname === '127.0.0.1';
+    const pageIsLocalhost = pageHost === 'localhost' || pageHost === '127.0.0.1';
+    if (configuredIsLocalhost && !pageIsLocalhost) {
+      configuredUrl.hostname = pageHost;
+      return configuredUrl.toString().replace(/\/$/, '');
+    }
+  } catch {
+    return configured;
+  }
+
+  return configured;
+}
+
+const API_BASE_URL = resolveApiBaseUrl();
+
+export function getApiBaseUrl() {
+  return API_BASE_URL;
+}
 
 export class ApiError extends Error {
   constructor(

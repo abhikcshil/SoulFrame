@@ -1,4 +1,4 @@
-import { apiRequest } from './client';
+import { apiRequest, getApiBaseUrl } from './client';
 
 // Types
 export interface User {
@@ -23,9 +23,19 @@ export interface DeviceRuntimeStatus {
   cache_free_bytes: number | null;
   current_media_id: string | null;
   current_playlist_id: string | null;
+  device_state: string | null;
+  temperature_c: number | null;
+  cpu_frequency_mhz: number | null;
+  dropped_frames: number | null;
+  playback_errors: number | null;
+  recent_logs: string[];
   health_status: string | null;
   last_error: string | null;
   updated_at: string | null;
+  assignment_type: 'none' | 'media' | 'playlist';
+  assigned_media_id: string | null;
+  assigned_playlist_id: string | null;
+  assigned_at: string | null;
 }
 
 export interface DeviceCommandStatus {
@@ -130,6 +140,12 @@ export const deviceApi = {
     });
   },
 
+  assignMedia: async (deviceId: string, mediaId: string): Promise<{ message: string }> => {
+    return apiRequest(`/devices/${deviceId}/assign-media/${mediaId}`, {
+      method: 'POST',
+    });
+  },
+
   runtime: async (deviceId: string): Promise<DeviceRuntimeStatus> => {
     return apiRequest(`/devices/${deviceId}/runtime`);
   },
@@ -152,25 +168,46 @@ export const mediaApi = {
     return apiRequest('/media');
   },
 
-  upload: async (file: File): Promise<Media> => {
+  upload: async (file: File, onProgress?: (progress: number) => void): Promise<Media> => {
     const formData = new FormData();
     formData.append('file', file);
 
-    const token = localStorage.getItem('token');
-    const response = await fetch(`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'}/media/upload`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-      },
-      body: formData,
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', `${getApiBaseUrl()}/media/upload`);
+
+      const token = localStorage.getItem('token');
+      if (token) {
+        xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+      }
+
+      xhr.upload.onprogress = (event) => {
+        if (event.lengthComputable && onProgress) {
+          onProgress(Math.round((event.loaded / event.total) * 100));
+        }
+      };
+
+      xhr.onload = () => {
+        let data: any = null;
+        try {
+          data = xhr.responseText ? JSON.parse(xhr.responseText) : null;
+        } catch {
+          data = null;
+        }
+
+        if (xhr.status >= 200 && xhr.status < 300) {
+          onProgress?.(100);
+          resolve(data as Media);
+          return;
+        }
+
+        reject(new Error(data?.detail || `Upload failed with status ${xhr.status}`));
+      };
+
+      xhr.onerror = () => reject(new Error('Network error during upload'));
+      xhr.onabort = () => reject(new Error('Upload canceled'));
+      xhr.send(formData);
     });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.detail || 'Upload failed');
-    }
-
-    return response.json();
   },
 
   delete: async (mediaId: string): Promise<void> => {

@@ -70,3 +70,14 @@ def assign_playlist_to_device(db: Session, device: Device, playlist_id: UUID) ->
     db.commit()
     db.refresh(assignment)
     return assignment
+
+
+def assign_media_to_device(db: Session, device: Device, media_id: UUID) -> DeviceAssignment:
+    """Assign one ready media item to a device (replace existing assignment)."""
+    db.query(DeviceAssignment).filter(DeviceAssignment.device_id == device.id).delete()
+
+    assignment = DeviceAssignment(device_id=device.id, media_id=media_id)
+    db.add(assignment)
+    db.commit()
+    db.refresh(assignment)
+    return assignment

@@ -13,6 +13,7 @@ export function MediaPage() {
   const [media, setMedia] = useState<Media[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [error, setError] = useState('');
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -42,9 +43,10 @@ export function MediaPage() {
 
     setError('');
     setIsUploading(true);
+    setUploadProgress(0);
 
     try {
-      const newMedia = await mediaApi.upload(file);
+      const newMedia = await mediaApi.upload(file, setUploadProgress);
       setMedia([newMedia, ...media]);
     } catch (err: any) {
       setError(err.message);
@@ -110,6 +112,21 @@ export function MediaPage() {
         >
           {isUploading ? 'Uploading...' : '+ Upload Media'}
         </button>
+
+        {isUploading && (
+          <div className="upload-status mb-24">
+            <div className="upload-status-header">
+              <strong>{uploadProgress < 100 ? 'Uploading' : 'Processing'}</strong>
+              <span>{uploadProgress}%</span>
+            </div>
+            <div className="progress-track">
+              <div className="progress-fill" style={{ width: `${uploadProgress}%` }} />
+            </div>
+            {uploadProgress === 100 && (
+              <p className="text-secondary">Upload complete. SoulFrame is preparing the playback file.</p>
+            )}
+          </div>
+        )}
 
         {media.length === 0 ? (
           <div className="list-empty">

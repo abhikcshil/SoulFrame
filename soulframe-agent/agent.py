@@ -166,6 +166,48 @@ def get_free_bytes(path: Path) -> int:
         return 0
 
 
+def get_local_ip() -> Optional[str]:
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+            sock.connect(("8.8.8.8", 80))
+            return sock.getsockname()[0]
+    except Exception:
+        return None
+
+
+def read_float_file(path: str, divisor: float = 1.0) -> Optional[float]:
+    try:
+        raw = Path(path).read_text(encoding="utf-8").strip()
+        return float(raw) / divisor
+    except Exception:
+        return None
+
+
+def get_temperature_c() -> Optional[float]:
+    value = read_float_file("/sys/class/thermal/thermal_zone0/temp", 1000.0)
+    if value is not None:
+        return round(value, 1)
+    try:
+        result = subprocess.run(["vcgencmd", "measure_temp"], check=True, capture_output=True, text=True, timeout=2)
+        text = result.stdout.strip().replace("temp=", "").replace("'C", "")
+        return round(float(text), 1)
+    except Exception:
+        return None
+
+
+def get_cpu_frequency_mhz() -> Optional[float]:
+    value = read_float_file("/sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq", 1000.0)
+    return round(value, 0) if value is not None else None
+
+
+def tail_log_lines(path: Path, limit: int = 20) -> List[str]:
+    try:
+        lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+        return lines[-limit:]
+    except Exception:
+        return []
+
+
 def safe_filename(media_id: str, original_filename: str) -> str:
     ext = Path(original_filename).suffix.lower()
     if ext not in [".mp4", ".mov", ".webm", ".mkv", ".gif", ".jpg", ".jpeg", ".png", ".webp"]:
@@ -316,7 +358,7 @@ def start_mpv_playlist(playlist_path: Path) -> subprocess.Popen:
         "--no-osc",
         "--no-border",
         "--no-input-default-bindings",
-        "--hwdec=no",
+        "--hwdec=rpi",
         "--loop-playlist=inf",
         f"--playlist={playlist_path}",
         f"--input-ipc-server={MPV_SOCKET_PATH}",
@@ -361,6 +403,10 @@ class DeviceAgent:
         self.current_content_revision = "none"
         self.current_config_revision = "none"
         self.last_sync_unix = 0.0
+        self.process_start_unix = time.time()
+        self.current_media_id: Optional[str] = None
+        self.current_playlist_id: Optional[str] = None
+        self.playback_errors = 0
         self.cache_index = load_cache_index()
 
     def ensure_registered(self) -> None:
@@ -413,6 +459,7 @@ class DeviceAgent:
             self.mpv_proc = start_mpv_image(UI_SCREEN_PATH)
 
         elif new_state == DeviceState.PLAYBACK_ERROR:
+            self.playback_errors += 1
             filename = kwargs.get("filename") or "unknown"
             reason = kwargs.get("reason") or "Unknown playback error"
             render_screen(
@@ -478,12 +525,20 @@ class DeviceAgent:
         log("Local media cache cleared")
 
     def build_sync_payload(self) -> Dict[str, Any]:
-        uptime = int(time.time() - self.last_sync_unix) if self.last_sync_unix > 0 else None
+        uptime = int(time.time() - self.process_start_unix)
         return {
             "app_version": self.app_version,
+            "ip": get_local_ip(),
             "storage_free_bytes": get_free_bytes(MEDIA_DIR),
             "cache_free_bytes": get_free_bytes(CACHE_DIR),
             "uptime_seconds": uptime,
+            "current_media_id": self.current_media_id,
+            "current_playlist_id": self.current_playlist_id,
+            "device_state": self.state.value,
+            "temperature_c": get_temperature_c(),
+            "cpu_frequency_mhz": get_cpu_frequency_mhz(),
+            "playback_errors": self.playback_errors,
+            "recent_logs": tail_log_lines(LOG_FILE),
             "known_content_revision": self.current_content_revision,
             "known_config_revision": self.current_config_revision,
             "include_commands": True,
@@ -543,11 +598,14 @@ class DeviceAgent:
 
                 assigned = sync_data.get("assigned_content") or {}
                 items = assigned.get("items") or []
+                assignment_type = assigned.get("assignment_type", "none")
                 content_revision = assigned.get("content_revision", "none")
                 has_items = bool(items)
                 content_changed = sync_data.get("content_changed", True) or flags["force_refresh"] or (content_revision != self.current_content_revision)
 
                 if not has_items:
+                    self.current_media_id = None
+                    self.current_playlist_id = None
                     self.current_content_revision = content_revision
                     self.transition(
                         DeviceState.PAIRED_IDLE,
@@ -555,10 +613,14 @@ class DeviceAgent:
                         device_name=device.get("device_name") or self.device_name,
                     )
                 else:
+                    self.current_playlist_id = assigned.get("assigned_playlist_id") if assignment_type == "playlist" else None
+                    self.current_media_id = assigned.get("assigned_media_id") if assignment_type == "media" else None
                     if content_changed or self.state != DeviceState.PLAYING:
                         try:
                             local_paths: List[Path] = []
                             for item in items:
+                                if not self.current_media_id:
+                                    self.current_media_id = item.get("media_id")
                                 media_path = download_media_item(
                                     self.api_base,
                                     self.device_token,

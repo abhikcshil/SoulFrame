@@ -1,139 +1,49 @@
-# SoulFrame Backend
+# SoulFrame backend
 
-FastAPI + SQLAlchemy backend for SoulFrame.
+The backend is a FastAPI/SQLAlchemy service for user authentication, device registration/pairing, assignments, media processing, device polling, telemetry, and commands. See the repository [development guide](../docs/DEVELOPMENT.md), [API reference](../docs/API.md), and [architecture](../docs/ARCHITECTURE.md) for cross-component detail.
 
-## Local Development
+## Run locally
 
-1. Create and activate virtualenv.
-2. Install dependencies.
-3. Install `ffmpeg` and `ffprobe` locally; video uploads are normalized with these command-line tools.
-4. Run API.
-
-```bash
-python -m venv .venv
-.venv/Scripts/activate  # Windows
+```powershell
+py -m venv .venv
+.\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+alembic upgrade head
+python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-Defaults are local-dev friendly:
+The normal local default is SQLite at `sqlite:///./local_test.db`; PostgreSQL is available through `docker-compose.yml`. The Docker image installs FFmpeg, but a local Python run requires `ffmpeg` and `ffprobe` on `PATH` for video processing.
 
-- `DATABASE_URL=sqlite:///./local_test.db`
-- CORS allows `http://localhost:5173` and common localhost variants
+Useful local endpoints:
 
-## Key Environment Variables
+- `GET /health` — basic health response
+- `/docs` — generated OpenAPI/interactive documentation
+- `/` — service/version response
 
-- `DATABASE_URL`
-- `SECRET_KEY`
-- `WEB_BASE_URL`
-- `MEDIA_STORAGE_PATH`
-- `DEVICE_DEFAULT_POLL_INTERVAL_SECONDS`
-- `DEVICE_DEFAULT_SYNC_INTERVAL_SECONDS`
-- `DEVICE_DEFAULT_CACHE_MAX_BYTES`
-- `DEVICE_COMMAND_DEFAULT_EXPIRY_SECONDS`
+## Configuration
 
-## Media Normalization Lifecycle
+Settings are loaded from `.env` in this directory. Never commit a real `.env`. Important settings include `DATABASE_URL`, `SECRET_KEY`, `WEB_BASE_URL`, `MEDIA_STORAGE_PATH`, upload limits/MIME types, CORS, pairing expiry, and device polling/cache defaults. Defaults and meanings are documented in the [development guide](../docs/DEVELOPMENT.md#configuration-reference).
 
-SoulFrame stores user uploads as source assets and separately creates device-safe playback assets.
+## Media pipeline
 
-- `upload`: the original file is stored under `original/` and a media row is created.
-- `processing`: the backend creates a playback rendition. Videos are converted to MP4/H.264/AAC/yuv420p, capped at 1080p, with `+faststart`. Images are preserved as playback copies for now.
-- `ready`: `playback_storage_key`, playback MIME type, playback size, dimensions, duration, and normalization metadata are saved when available.
-- `failed`: the original upload remains stored, `processing_error` explains the failure, and the item is blocked from device assignment/playback.
+Uploaded sources are stored separately from device playback assets. Video processing produces normalized MP4/H.264/AAC/yuv420p media, captures metadata, and tries to generate a modest JPEG thumbnail. Processing states are `uploaded`, `processing`, `ready`, and `failed`. Device sync/download only exposes ready playback assets.
 
-Devices never consume raw uploads. `/device/sync` only returns `ready` media with playback metadata and `/device/media/{media_id}/download` serves `playback_storage_key`.
+Browser thumbnails and previews use short-lived signed URLs after the authenticated caller has passed media ownership checks. Device downloads require device authentication and are restricted to assigned content.
 
-For the local MVP, processing runs as a FastAPI background task after the upload response. This gives the dashboard a real transfer phase followed by a visible `processing` phase without requiring a separate worker. A production deployment can replace that task with a job queue while reusing the centralized normalization logic in `app/services/media_processing.py`.
+After applying migration `004`, backfill thumbnails for older ready videos:
 
-## Library thumbnails and previews
-
-When a video normalization succeeds, FFmpeg extracts a modest JPEG thumbnail at roughly 25% of its duration and stores it as `thumbnails/<media-id>.jpg`. Thumbnail failure does not make a media item unavailable for devices. Both thumbnails and normalized browser previews are private: the dashboard first requests short-lived, ownership-checked signed URLs, then the browser loads those URLs without exposing its JWT. Preview responses support HTTP byte ranges for seeking.
-
-After deploying migration `004`, generate thumbnails for older ready videos with:
-
-```bash
+```powershell
 python -m app.scripts.backfill_thumbnails
 ```
 
-The command is safe to rerun; it skips media that already have a thumbnail key and records individual generation errors without changing playback readiness.
+This is idempotent: existing thumbnail files are skipped; individual failures are recorded without changing playback readiness.
 
-## Device API (MVP Contract)
+## Schema and tests
 
-Device auth is fully separate from user auth.
+Alembic migrations are in `alembic/versions`; apply them with `alembic upgrade head`. The API also calls `Base.metadata.create_all()` on startup for local convenience, but migrations are the upgrade mechanism.
 
-- User auth: JWT bearer tokens (`/auth/*`)
-- Device auth: `X-Device-Token: <token>` and optional `X-Device-Id: <uuid>`
+```powershell
+python -m unittest tests.test_media_thumbnails
+```
 
-### 1. Device registration and claim
-
-- `POST /device/register`
-  - Creates permanent `device_id` and `device_token`
-- `POST /device/pair/request` (device-auth)
-  - Returns pairing code + claim URL
-- `POST /devices/claim` (user-auth)
-  - Claims device to user account
-
-### 2. Poll/sync
-
-- `POST /device/sync` (device-auth)
-  - Supports initial sync and recurring sync
-  - Request includes optional telemetry and known revisions:
-    - `known_content_revision`
-    - `known_config_revision`
-  - Response returns:
-    - `has_changes`, `content_changed`, `config_changed`
-    - `assigned_content` (with file metadata + download URLs)
-    - `runtime_config`
-    - `pending_commands`
-- `POST /device/checkin` is kept as a compatibility alias to `/device/sync`
-
-### 3. Heartbeat
-
-- `POST /device/heartbeat` (device-auth)
-  - Updates runtime status: app version, IP, uptime, free space, health, last error, currently playing IDs
-  - Returns current state + poll interval hint
-
-### 4. Commands (poll-friendly queue)
-
-- Queue command from dashboard:
-  - `POST /devices/{device_id}/commands` (user-auth)
-- List recent command statuses:
-  - `GET /devices/{device_id}/commands` (user-auth)
-- Device receives pending commands in `/device/sync`
-- Device acknowledges completion:
-  - `POST /device/commands/{command_id}/ack` (device-auth)
-
-Supported command types:
-
-- `refresh_now`
-- `restart_playback`
-- `clear_cache`
-- `reboot_client`
-- `unassign_content`
-- `run_health_check`
-- `debug_message`
-
-### 5. Config retrieval
-
-- `GET /device/config` (device-auth)
-- Also included in `/device/sync` response with `config_revision`
-
-### 6. Media download
-
-- `GET /device/media/{media_id}/download` (device-auth)
-  - Access is restricted to currently assigned content
-  - Includes ETag header for cache validation support
-
-### 7. Device telemetry for dashboard
-
-- `GET /devices/{device_id}/runtime` (user-auth)
-  - Returns latest runtime heartbeat/status snapshot
-
-## Phone / LAN development
-
-Run both services on all interfaces, then open the frontend using the computer's LAN address (for example `http://192.168.1.100:5173`). The frontend derives the API host from the page host, so a default `VITE_API_BASE_URL=http://localhost:8000` is safely rewritten to the LAN host when opened from a phone. The backend CORS policy accepts private-LAN frontend origins.
-
-## Notes
-
-- MVP transport is polling; response models are designed to be reused by future long-poll/SSE/websocket delivery.
-- Offline playback behavior is device-side; backend supplies stable assignment metadata and checksums so device can keep cached content unless revisions change.
+The thumbnail test requires installed backend dependencies and FFmpeg. Do not run migrations, backfills, or storage cleanup against a shared database merely as a documentation check.

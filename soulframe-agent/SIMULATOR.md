@@ -1,5 +1,7 @@
 # Windows SoulFrame Device Simulator
 
+For the complete Windows three-terminal workflow and LAN notes, see the [development guide](../docs/DEVELOPMENT.md). This document covers simulator-specific behavior.
+
 ## Existing-agent audit
 
 `agent.py` remains the Raspberry Pi entry point. It registers a device, persists
@@ -14,7 +16,7 @@ authentication, command acknowledgement, and media filename helpers live in
 
 ## Install on Windows
 
-1. Install Python 3.10+ and [mpv](https://mpv.io/installation/) and put `mpv.exe`
+1. Install Python 3 with Tkinter and [mpv](https://mpv.io/installation/) and put `mpv.exe`
    on `PATH`.
 2. From `soulframe-agent`, install simulator dependencies:
 

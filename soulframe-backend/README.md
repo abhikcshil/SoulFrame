@@ -43,7 +43,7 @@ SoulFrame stores user uploads as source assets and separately creates device-saf
 
 Devices never consume raw uploads. `/device/sync` only returns `ready` media with playback metadata and `/device/media/{media_id}/download` serves `playback_storage_key`.
 
-MVP limitation: processing runs synchronously inside the upload request. The normalization logic is centralized in `app/services/media_processing.py` so a future worker can call the same processing entry point.
+For the local MVP, processing runs as a FastAPI background task after the upload response. This gives the dashboard a real transfer phase followed by a visible `processing` phase without requiring a separate worker. A production deployment can replace that task with a job queue while reusing the centralized normalization logic in `app/services/media_processing.py`.
 
 ## Device API (MVP Contract)
 
@@ -116,6 +116,10 @@ Supported command types:
 
 - `GET /devices/{device_id}/runtime` (user-auth)
   - Returns latest runtime heartbeat/status snapshot
+
+## Phone / LAN development
+
+Run both services on all interfaces, then open the frontend using the computer's LAN address (for example `http://192.168.1.100:5173`). The frontend derives the API host from the page host, so a default `VITE_API_BASE_URL=http://localhost:8000` is safely rewritten to the LAN host when opened from a phone. The backend CORS policy accepts private-LAN frontend origins.
 
 ## Notes
 

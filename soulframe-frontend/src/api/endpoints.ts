@@ -168,6 +168,10 @@ export const mediaApi = {
     return apiRequest('/media');
   },
 
+  get: async (mediaId: string): Promise<Media> => {
+    return apiRequest(`/media/${mediaId}`);
+  },
+
   upload: async (file: File, onProgress?: (progress: number) => void): Promise<Media> => {
     const formData = new FormData();
     formData.append('file', file);

@@ -10,6 +10,7 @@ The device runs a clear state-driven loop with explicit states:
 - `playback_error`
 
 It also shows a debug overlay (device_id, content_revision, last sync time) for test verification.
+Its regular sync payload reports app/runtime state, free storage, temperature and CPU frequency when the Pi exposes them, MPV dropped frames when available, playback errors, and a short agent-log tail for the dashboard runtime panel.
 
 ## Requirements (Raspberry Pi / Linux)
 

@@ -155,7 +155,7 @@ export function Devices() {
                       onClick={() => navigate(`/devices/${device.id}/assign`)}
                       className="btn btn-secondary"
                     >
-                      Assign Playlist
+                      Assign Content
                     </button>
                   </>
                 )}

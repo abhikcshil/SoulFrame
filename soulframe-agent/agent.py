@@ -386,6 +386,24 @@ def show_mpv_debug_overlay(debug: DebugOverlay) -> None:
         pass
 
 
+def get_mpv_dropped_frames() -> Optional[int]:
+    """Return MPV's cumulative dropped-frame counter when its IPC socket is live."""
+    if not MPV_SOCKET_PATH.exists():
+        return None
+    try:
+        command = {"command": ["get_property", "drop-frame-count"]}
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
+            client.settimeout(0.5)
+            client.connect(str(MPV_SOCKET_PATH))
+            client.sendall((json.dumps(command) + "\n").encode("utf-8"))
+            response = client.recv(4096).decode("utf-8", errors="replace")
+        value = json.loads(response).get("data")
+        return int(value) if value is not None else None
+    except Exception:
+        # Older MPV versions may not expose the property; report it as unknown.
+        return None
+
+
 class DeviceAgent:
     def __init__(self) -> None:
         self.config = load_or_init_config()
@@ -537,6 +555,7 @@ class DeviceAgent:
             "device_state": self.state.value,
             "temperature_c": get_temperature_c(),
             "cpu_frequency_mhz": get_cpu_frequency_mhz(),
+            "dropped_frames": get_mpv_dropped_frames(),
             "playback_errors": self.playback_errors,
             "recent_logs": tail_log_lines(LOG_FILE),
             "known_content_revision": self.current_content_revision,

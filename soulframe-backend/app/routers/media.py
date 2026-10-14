@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status, UploadFile, File
 from sqlalchemy.orm import Session
 from uuid import UUID
 
@@ -14,6 +14,7 @@ router = APIRouter(prefix="/media", tags=["media"])
 
 @router.post("/upload", response_model=MediaResponse, status_code=status.HTTP_201_CREATED)
 async def upload_media(
+    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
@@ -48,7 +49,7 @@ async def upload_media(
         mime_type=file.content_type,
         size_bytes=size_bytes
     )
-    
+    background_tasks.add_task(media_service.process_media_in_background, media.id)
     return media
 
 
@@ -60,6 +61,21 @@ async def list_media(
     """List all media for current user"""
     media_list = media_service.get_user_media(db, current_user.id)
     return media_list
+
+
+@router.get("/{media_id}", response_model=MediaResponse)
+async def get_media(
+    media_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    media = db.query(Media).filter(
+        Media.id == media_id,
+        Media.owner_user_id == current_user.id,
+    ).first()
+    if not media:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Media not found")
+    return media
 
 
 @router.delete("/{media_id}", status_code=status.HTTP_204_NO_CONTENT)

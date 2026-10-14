@@ -5,6 +5,13 @@ import { deviceApi, Device, Media, mediaApi, Playlist, playlistApi } from '../ap
 import { formatFileSize, getPlaylistReadiness } from '../utils/media';
 
 type AssignMode = 'library' | 'upload' | 'playlist';
+type UploadStage = 'uploading' | 'processing';
+
+const PROCESSING_POLL_MS = 2000;
+
+function waitForProcessingTick() {
+  return new Promise((resolve) => window.setTimeout(resolve, PROCESSING_POLL_MS));
+}
 
 export function DeviceAssign() {
   const { deviceId } = useParams<{ deviceId: string }>();
@@ -19,6 +26,7 @@ export function DeviceAssign() {
   const [isAssigning, setIsAssigning] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadStage, setUploadStage] = useState<UploadStage>('uploading');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
@@ -105,16 +113,25 @@ export function DeviceAssign() {
     setSuccess('');
     setIsUploading(true);
     setUploadProgress(0);
+    setUploadStage('uploading');
 
     try {
       const uploaded = await mediaApi.upload(file, setUploadProgress);
       setMedia((current) => [uploaded, ...current.filter((item) => item.id !== uploaded.id)]);
+      setUploadStage('processing');
 
-      if (uploaded.status === 'ready' && uploaded.playback_storage_key) {
-        await deviceApi.assignMedia(deviceId, uploaded.id);
+      let processed = uploaded;
+      while (processed.status === 'uploaded' || processed.status === 'processing') {
+        await waitForProcessingTick();
+        processed = await mediaApi.get(uploaded.id);
+        setMedia((current) => [processed, ...current.filter((item) => item.id !== processed.id)]);
+      }
+
+      if (processed.status === 'ready' && processed.playback_storage_key) {
+        await deviceApi.assignMedia(deviceId, processed.id);
         setSuccess('Upload complete and media assigned.');
       } else {
-        setSuccess('Upload complete. Media is processing and can be assigned when ready.');
+        setError(processed.processing_error || 'Upload completed, but media processing failed.');
       }
     } catch (err: any) {
       setError(err.message);
@@ -235,14 +252,14 @@ export function DeviceAssign() {
             {isUploading && (
               <div className="upload-status">
                 <div className="upload-status-header">
-                  <strong>{uploadProgress < 100 ? 'Uploading' : 'Processing'}</strong>
-                  <span>{uploadProgress}%</span>
+                  <strong>{uploadStage === 'uploading' ? 'Uploading' : 'Processing'}</strong>
+                  <span>{uploadStage === 'uploading' ? `${uploadProgress}%` : '100%'}</span>
                 </div>
                 <div className="progress-track">
                   <div className="progress-fill" style={{ width: `${uploadProgress}%` }} />
                 </div>
-                {uploadProgress === 100 && (
-                  <p className="text-secondary">Upload finished. Waiting for processing status.</p>
+                {uploadStage === 'processing' && (
+                  <p className="text-secondary">Upload finished. Preparing a device-safe playback file, then assigning it.</p>
                 )}
               </div>
             )}

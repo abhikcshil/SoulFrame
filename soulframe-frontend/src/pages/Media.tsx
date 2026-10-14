@@ -9,11 +9,18 @@ import {
   mediaTypeLabel,
 } from '../utils/media';
 
+const PROCESSING_POLL_MS = 2000;
+
+function waitForProcessingTick() {
+  return new Promise((resolve) => window.setTimeout(resolve, PROCESSING_POLL_MS));
+}
+
 export function MediaPage() {
   const [media, setMedia] = useState<Media[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadStage, setUploadStage] = useState<'uploading' | 'processing'>('uploading');
   const [error, setError] = useState('');
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -44,10 +51,23 @@ export function MediaPage() {
     setError('');
     setIsUploading(true);
     setUploadProgress(0);
+    setUploadStage('uploading');
 
     try {
       const newMedia = await mediaApi.upload(file, setUploadProgress);
       setMedia([newMedia, ...media]);
+      setUploadStage('processing');
+
+      let processed = newMedia;
+      while (processed.status === 'uploaded' || processed.status === 'processing') {
+        await waitForProcessingTick();
+        processed = await mediaApi.get(newMedia.id);
+        setMedia((current) => [processed, ...current.filter((item) => item.id !== processed.id)]);
+      }
+
+      if (processed.status === 'failed') {
+        setError(processed.processing_error || 'Media processing failed.');
+      }
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -116,13 +136,13 @@ export function MediaPage() {
         {isUploading && (
           <div className="upload-status mb-24">
             <div className="upload-status-header">
-              <strong>{uploadProgress < 100 ? 'Uploading' : 'Processing'}</strong>
-              <span>{uploadProgress}%</span>
+              <strong>{uploadStage === 'uploading' ? 'Uploading' : 'Processing'}</strong>
+              <span>{uploadStage === 'uploading' ? `${uploadProgress}%` : '100%'}</span>
             </div>
             <div className="progress-track">
               <div className="progress-fill" style={{ width: `${uploadProgress}%` }} />
             </div>
-            {uploadProgress === 100 && (
+            {uploadStage === 'processing' && (
               <p className="text-secondary">Upload complete. SoulFrame is preparing the playback file.</p>
             )}
           </div>

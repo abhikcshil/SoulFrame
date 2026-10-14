@@ -12,9 +12,11 @@ function resolveApiBaseUrl() {
 
   try {
     const configuredUrl = new URL(configured);
-    const configuredIsLocalhost = configuredUrl.hostname === 'localhost' || configuredUrl.hostname === '127.0.0.1';
+    const configuredIsLocalhost = ['localhost', '127.0.0.1', '0.0.0.0', '[::]', '::'].includes(configuredUrl.hostname);
     const pageIsLocalhost = pageHost === 'localhost' || pageHost === '127.0.0.1';
     if (configuredIsLocalhost && !pageIsLocalhost) {
+      // A build made with a loopback API must still work when opened from a
+      // phone. Keep the port, but use the host that served this page.
       configuredUrl.hostname = pageHost;
       return configuredUrl.toString().replace(/\/$/, '');
     }

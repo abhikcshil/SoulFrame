@@ -53,7 +53,12 @@ export function Devices() {
   if (isLoading) {
     return (
       <Layout>
-        <div className="loading">Loading devices...</div>
+        <div className="container">
+          <div className="page-heading"><div><h1>My Devices</h1><p>Your frames, at a glance.</p></div></div>
+          <div className="device-grid" aria-label="Loading devices">
+            {[0, 1, 2].map((item) => <div className="card device-card skeleton-card" key={item} />)}
+          </div>
+        </div>
       </Layout>
     );
   }
@@ -61,13 +66,12 @@ export function Devices() {
   return (
     <Layout>
       <div className="container">
-        <h1>My Devices</h1>
+        <div className="page-heading">
+          <div><h1>My Devices</h1><p>Your frames, at a glance.</p></div>
+          <Link to="/claim" className="btn btn-primary">+ Claim New Device</Link>
+        </div>
 
         {error && <p className="text-error">{error}</p>}
-
-        <Link to="/claim" className="btn btn-primary mb-24">
-          + Claim New Device
-        </Link>
 
         {devices.length === 0 ? (
           <div className="list-empty">
@@ -77,9 +81,9 @@ export function Devices() {
             </p>
           </div>
         ) : (
-          <div className="gap-8">
+          <div className="device-grid">
             {devices.map((device) => (
-              <div key={device.id} className="card">
+              <div key={device.id} className="card device-card">
                 {editingId === device.id ? (
                   <div className="inline-edit">
                     <input
@@ -104,15 +108,9 @@ export function Devices() {
                   </div>
                 ) : (
                   <>
-                    <div
-                      style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        marginBottom: '8px',
-                      }}
-                    >
-                      <h3 style={{ margin: 0 }}>{device.name}</h3>
+                    <div className="device-card-visual"><span className="device-card-orb" aria-hidden="true" /><span className="device-card-label">SOULFRAME</span></div>
+                    <div className="device-card-title">
+                      <h3>{device.name}</h3>
                       <button
                         onClick={(event) => {
                           event.stopPropagation();
@@ -124,14 +122,7 @@ export function Devices() {
                       </button>
                     </div>
 
-                    <div
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '8px',
-                        marginBottom: '12px',
-                      }}
-                    >
+                    <div className="device-card-status">
                       <span
                         className={`status-dot ${
                           isDeviceOnline(device) ? 'status-online' : 'status-offline'
@@ -144,19 +135,10 @@ export function Devices() {
                       </span>
                     </div>
 
-                    <button
-                      onClick={() => navigate(`/devices/${device.id}`)}
-                      className="btn btn-primary mb-24"
-                    >
-                      Runtime Monitor
-                    </button>
-
-                    <button
-                      onClick={() => navigate(`/devices/${device.id}/assign`)}
-                      className="btn btn-secondary"
-                    >
-                      Assign Content
-                    </button>
+                    <div className="device-card-actions">
+                      <button onClick={() => navigate(`/devices/${device.id}`)} className="btn btn-primary">Runtime Monitor</button>
+                      <button onClick={() => navigate(`/devices/${device.id}/assign`)} className="btn btn-secondary">Assign Content</button>
+                    </div>
                   </>
                 )}
               </div>

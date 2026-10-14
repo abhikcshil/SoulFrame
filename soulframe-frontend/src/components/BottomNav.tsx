@@ -1,8 +1,12 @@
 import { NavLink } from 'react-router-dom';
 
-export function BottomNav() {
+interface BottomNavProps {
+  variant?: 'mobile' | 'sidebar';
+}
+
+export function BottomNav({ variant = 'mobile' }: BottomNavProps) {
   return (
-    <nav className="bottom-nav">
+    <nav className={`bottom-nav ${variant === 'sidebar' ? 'sidebar-nav' : ''}`} aria-label="Primary navigation">
       <NavLink to="/devices" className={({ isActive }) => `bottom-nav-item ${isActive ? 'active' : ''}`}>
         <span className="bottom-nav-icon">📱</span>
         <span>Devices</span>

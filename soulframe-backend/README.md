@@ -45,6 +45,18 @@ Devices never consume raw uploads. `/device/sync` only returns `ready` media wit
 
 For the local MVP, processing runs as a FastAPI background task after the upload response. This gives the dashboard a real transfer phase followed by a visible `processing` phase without requiring a separate worker. A production deployment can replace that task with a job queue while reusing the centralized normalization logic in `app/services/media_processing.py`.
 
+## Library thumbnails and previews
+
+When a video normalization succeeds, FFmpeg extracts a modest JPEG thumbnail at roughly 25% of its duration and stores it as `thumbnails/<media-id>.jpg`. Thumbnail failure does not make a media item unavailable for devices. Both thumbnails and normalized browser previews are private: the dashboard first requests short-lived, ownership-checked signed URLs, then the browser loads those URLs without exposing its JWT. Preview responses support HTTP byte ranges for seeking.
+
+After deploying migration `004`, generate thumbnails for older ready videos with:
+
+```bash
+python -m app.scripts.backfill_thumbnails
+```
+
+The command is safe to rerun; it skips media that already have a thumbnail key and records individual generation errors without changing playback readiness.
+
 ## Device API (MVP Contract)
 
 Device auth is fully separate from user auth.

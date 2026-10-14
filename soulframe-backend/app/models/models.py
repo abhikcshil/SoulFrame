@@ -55,6 +55,9 @@ class Media(Base):
     playback_mime_type = Column(String(100), nullable=True)
     original_size_bytes = Column(BigInteger, nullable=True)
     playback_size_bytes = Column(BigInteger, nullable=True)
+    thumbnail_storage_key = Column(String(500), nullable=True)
+    thumbnail_generated_at = Column(DateTime(timezone=True), nullable=True)
+    thumbnail_error = Column(Text, nullable=True)
     width = Column(Integer, nullable=True)
     height = Column(Integer, nullable=True)
     duration_seconds = Column(Float, nullable=True)
@@ -66,6 +69,10 @@ class Media(Base):
     owner = relationship("User", back_populates="media")
     playlist_items = relationship("PlaylistItem", back_populates="media")
     direct_assignments = relationship("DeviceAssignment", back_populates="media")
+
+    @property
+    def thumbnail_available(self) -> bool:
+        return bool(self.thumbnail_storage_key)
 
 
 class Playlist(Base):

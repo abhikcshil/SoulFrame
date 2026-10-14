@@ -2,7 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Layout } from '../components/Layout';
 import { deviceApi, Device, Media, mediaApi, Playlist, playlistApi } from '../api/endpoints';
-import { formatFileSize, getPlaylistReadiness } from '../utils/media';
+import { getPlaylistReadiness } from '../utils/media';
+import { MediaPreviewCard } from '../components/MediaPreview';
 
 type AssignMode = 'library' | 'upload' | 'playlist';
 type UploadStage = 'uploading' | 'processing';
@@ -27,6 +28,7 @@ export function DeviceAssign() {
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadStage, setUploadStage] = useState<UploadStage>('uploading');
+  const [selectedMediaId, setSelectedMediaId] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
@@ -59,10 +61,7 @@ export function DeviceAssign() {
   };
 
   const mediaById = useMemo(() => new Map(media.map((item) => [item.id, item])), [media]);
-  const readyMedia = useMemo(
-    () => media.filter((item) => item.status === 'ready' && item.playback_storage_key),
-    [media]
-  );
+  const selectedMedia = useMemo(() => media.find((item) => item.id === selectedMediaId) || null, [media, selectedMediaId]);
 
   const handleAssignMedia = async (mediaId: string) => {
     if (!deviceId) return;
@@ -204,34 +203,27 @@ export function DeviceAssign() {
         {mode === 'library' && (
           <>
             <div className="info-box">
-              Direct assignment is for fast testing and simple playback. Only ready optimized media can be selected.
+              Select a ready item, preview it with the play control, then confirm assignment. Processing and failed items cannot be selected.
             </div>
 
-            {readyMedia.length === 0 ? (
+            {media.length === 0 ? (
               <div className="list-empty">
-                <p>No ready media yet</p>
+                <p>No media yet</p>
                 <p className="text-secondary">Upload a file or wait for processing to finish.</p>
               </div>
             ) : (
-              <div className="gap-8">
-                {readyMedia.map((item) => (
-                  <div key={item.id} className="card assign-row">
-                    <div>
-                      <h3 style={{ margin: 0 }}>{item.original_filename}</h3>
-                      <p className="text-secondary">
-                        {formatFileSize(item.playback_size_bytes || item.size_bytes)}
-                      </p>
-                    </div>
-                    <button
-                      onClick={() => handleAssignMedia(item.id)}
-                      className="btn btn-small btn-primary"
-                      disabled={isAssigning}
-                    >
-                      {isAssigning ? 'Assigning...' : 'Assign'}
-                    </button>
-                  </div>
-                ))}
-              </div>
+              <>
+                <div className="media-grid assignment-media-grid">
+                  {media.map((item) => {
+                    const assignable = item.status === 'ready' && Boolean(item.playback_storage_key);
+                    return <MediaPreviewCard key={item.id} item={item} selected={item.id === selectedMediaId} disabled={!assignable} onSelect={() => setSelectedMediaId(item.id)} />;
+                  })}
+                </div>
+                <div className="assignment-confirm-bar">
+                  <span>{selectedMedia ? `Selected: ${selectedMedia.original_filename}` : 'Choose a ready media item'}</span>
+                  <button onClick={() => selectedMedia && handleAssignMedia(selectedMedia.id)} className="btn btn-primary" disabled={!selectedMedia || isAssigning}>{isAssigning ? 'Assigning...' : 'Assign to Device'}</button>
+                </div>
+              </>
             )}
           </>
         )}

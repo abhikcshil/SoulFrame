@@ -18,6 +18,9 @@ class MediaResponse(BaseModel):
     playback_mime_type: Optional[str] = None
     original_size_bytes: Optional[int] = None
     playback_size_bytes: Optional[int] = None
+    thumbnail_available: bool = False
+    thumbnail_generated_at: Optional[datetime] = None
+    thumbnail_error: Optional[str] = None
     width: Optional[int] = None
     height: Optional[int] = None
     duration_seconds: Optional[float] = None
@@ -28,3 +31,9 @@ class MediaResponse(BaseModel):
     
     class Config:
         from_attributes = True
+
+
+class MediaAssetUrlsResponse(BaseModel):
+    thumbnail_url: Optional[str] = None
+    preview_url: Optional[str] = None
+    expires_at: datetime

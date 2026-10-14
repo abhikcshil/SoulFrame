@@ -77,6 +77,8 @@ def delete_media(db: Session, media: Media) -> None:
     delete_file(media.source_storage_key or media.filename)
     if media.playback_storage_key != media.source_storage_key:
         delete_file(media.playback_storage_key)
+    if media.thumbnail_storage_key:
+        delete_file(media.thumbnail_storage_key)
     
     db.delete(media)
     db.commit()

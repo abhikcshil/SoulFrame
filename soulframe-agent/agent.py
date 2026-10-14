@@ -15,8 +15,21 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+# Simulator dispatch happens before the Pi filesystem layout is initialized.
+# This prevents `python agent.py --simulator` from creating or reading any
+# `/home/admin/soulframe` paths on a Windows development machine.
+if __name__ == "__main__" and "--simulator" in sys.argv:
+    from simulator import main as simulator_main
+
+    try:
+        simulator_main()
+    except KeyboardInterrupt:
+        print("SoulFrame simulator shutting down", flush=True)
+    sys.exit(0)
+
 import requests
 from PIL import Image, ImageDraw, ImageFont
+from device_protocol import ack_command, headers, register_device, safe_filename, sync_device
 
 # Filesystem layout
 BASE_DIR = Path("/home/admin/soulframe")
@@ -105,59 +118,6 @@ def save_config(cfg: Dict[str, Any]) -> None:
         json.dump(cfg, handle, indent=2)
 
 
-def headers(token: Optional[str], device_id: Optional[str]) -> Dict[str, str]:
-    out: Dict[str, str] = {}
-    if token:
-        out["X-Device-Token"] = token
-    if device_id:
-        out["X-Device-Id"] = device_id
-    return out
-
-
-def register_device(api_base: str, device_name: str, app_version: str) -> Dict[str, Any]:
-    url = f"{api_base.rstrip('/')}/device/register"
-    payload = {"name": device_name, "app_version": app_version}
-    response = requests.post(url, json=payload, timeout=10)
-    response.raise_for_status()
-    return response.json()
-
-
-def sync_device(
-    api_base: str,
-    device_token: str,
-    device_id: str,
-    payload: Dict[str, Any],
-) -> Dict[str, Any]:
-    url = f"{api_base.rstrip('/')}/device/sync"
-    response = requests.post(
-        url,
-        json=payload,
-        headers=headers(device_token, device_id),
-        timeout=12,
-    )
-    response.raise_for_status()
-    return response.json()
-
-
-def ack_command(
-    api_base: str,
-    device_token: str,
-    device_id: str,
-    command_id: str,
-    status_value: str,
-    message: str = "",
-) -> None:
-    url = f"{api_base.rstrip('/')}/device/commands/{command_id}/ack"
-    payload = {"status": status_value, "message": message}
-    response = requests.post(
-        url,
-        json=payload,
-        headers=headers(device_token, device_id),
-        timeout=8,
-    )
-    response.raise_for_status()
-
-
 def get_free_bytes(path: Path) -> int:
     try:
         st = os.statvfs(str(path))
@@ -206,13 +166,6 @@ def tail_log_lines(path: Path, limit: int = 20) -> List[str]:
         return lines[-limit:]
     except Exception:
         return []
-
-
-def safe_filename(media_id: str, original_filename: str) -> str:
-    ext = Path(original_filename).suffix.lower()
-    if ext not in [".mp4", ".mov", ".webm", ".mkv", ".gif", ".jpg", ".jpeg", ".png", ".webp"]:
-        ext = ".bin"
-    return f"{media_id}{ext}"
 
 
 def load_cache_index() -> Dict[str, Any]:
@@ -679,6 +632,11 @@ class DeviceAgent:
 
 
 def main() -> None:
+    if "--simulator" in sys.argv:
+        # Imported only on demand so the Pi's normal startup has no Windows GUI dependency.
+        from simulator import main as simulator_main
+        simulator_main()
+        return
     agent = DeviceAgent()
     agent.run()
 
@@ -687,7 +645,13 @@ if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:
-        log("Shutting down")
+        if "--simulator" in sys.argv:
+            print("SoulFrame simulator shutting down", flush=True)
+        else:
+            log("Shutting down")
     except Exception as fatal:
-        log(f"FATAL: {repr(fatal)}")
+        if "--simulator" in sys.argv:
+            print(f"SIMULATOR FATAL: {fatal!r}", file=sys.stderr, flush=True)
+        else:
+            log(f"FATAL: {repr(fatal)}")
         sys.exit(1)

@@ -70,6 +70,9 @@ export interface Media {
   playback_mime_type: string | null;
   original_size_bytes: number | null;
   playback_size_bytes: number | null;
+  thumbnail_available: boolean;
+  thumbnail_generated_at: string | null;
+  thumbnail_error: string | null;
   width: number | null;
   height: number | null;
   duration_seconds: number | null;
@@ -82,6 +85,12 @@ export interface PlaylistItem {
   id: string;
   media_id: string;
   position: number;
+}
+
+export interface MediaAssetUrls {
+  thumbnail_url: string | null;
+  preview_url: string | null;
+  expires_at: string;
 }
 
 export interface Playlist {
@@ -170,6 +179,10 @@ export const mediaApi = {
 
   get: async (mediaId: string): Promise<Media> => {
     return apiRequest(`/media/${mediaId}`);
+  },
+
+  assetUrls: async (mediaId: string): Promise<MediaAssetUrls> => {
+    return apiRequest(`/media/${mediaId}/asset-urls`, { method: 'POST' });
   },
 
   upload: async (file: File, onProgress?: (progress: number) => void): Promise<Media> => {

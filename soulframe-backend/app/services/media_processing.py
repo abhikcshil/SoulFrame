@@ -18,6 +18,7 @@ FAILED = "failed"
 UPLOADED = "uploaded"
 
 PLAYBACK_VIDEO_MIME_TYPE = "video/mp4"
+THUMBNAIL_MIME_TYPE = "image/jpeg"
 VIDEO_MIME_PREFIX = "video/"
 IMAGE_MIME_PREFIX = "image/"
 
@@ -151,6 +152,36 @@ def normalize_video(source_path: str, output_path: str) -> None:
         raise MediaProcessingError(result.stderr.strip() or "ffmpeg failed to normalize video")
 
 
+def generate_video_thumbnail(media: Media) -> None:
+    """Generate one modest JPEG frame for an already-normalized video.
+
+    Thumbnail failures do not make the playable rendition unavailable.  This
+    keeps device playback and assignment independent from library cosmetics.
+    """
+    playback_key = media.playback_storage_key
+    if not playback_key:
+        raise MediaProcessingError("Cannot generate a thumbnail before playback media exists")
+
+    output_key = f"thumbnails/{media.id}.jpg"
+    output_path = get_file_path(output_key)
+    Path(output_path).parent.mkdir(parents=True, exist_ok=True)
+    # Seeking to 25% gives a useful representative image. Zero is safe for
+    # very short clips and videos without a reliable duration.
+    seek_seconds = max(0.0, (media.duration_seconds or 0.0) * 0.25)
+    result = _run_command(
+        [
+            "ffmpeg", "-y", "-ss", f"{seek_seconds:.3f}", "-i", get_file_path(playback_key),
+            "-frames:v", "1", "-vf", "scale=w=min(480\\,iw):h=-2:force_original_aspect_ratio=decrease",
+            "-pix_fmt", "yuvj420p", "-q:v", "4", output_path,
+        ]
+    )
+    if result.returncode != 0 or not Path(output_path).exists():
+        raise MediaProcessingError(result.stderr.strip() or "ffmpeg failed to generate thumbnail")
+    media.thumbnail_storage_key = output_key
+    media.thumbnail_generated_at = utcnow()
+    media.thumbnail_error = None
+
+
 def apply_probe_metadata(media: Media, metadata: ProbeMetadata) -> None:
     media.width = metadata.width
     media.height = metadata.height
@@ -177,6 +208,11 @@ def process_media(media: Media) -> None:
         media.playback_size_bytes = Path(playback_path).stat().st_size
         media.normalized_at = utcnow()
         media.status = READY
+        try:
+            generate_video_thumbnail(media)
+        except Exception as exc:
+            # A video remains ready even if an optional thumbnail cannot be made.
+            media.thumbnail_error = str(exc)[:2000]
         return
 
     if is_image_mime_type(media.original_mime_type or media.mime_type):

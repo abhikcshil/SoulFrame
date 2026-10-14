@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Layout } from '../components/Layout';
 import { deviceApi, Device } from '../api/endpoints';
 import { formatRelativeTime, isDeviceOnline } from '../utils/device';
+import { Pencil } from 'lucide-react';
 
 export function Devices() {
   const [devices, setDevices] = useState<Device[]>([]);
@@ -116,9 +117,10 @@ export function Devices() {
                           event.stopPropagation();
                           handleEdit(device);
                         }}
-                        className="btn btn-small btn-secondary"
+                        className="icon-btn"
+                        aria-label={`Edit ${device.name}`}
                       >
-                        Edit
+                        <Pencil size={15} aria-hidden="true" />
                       </button>
                     </div>
 
@@ -131,13 +133,15 @@ export function Devices() {
                       <span className="text-secondary">
                         {isDeviceOnline(device)
                           ? 'Online'
-                          : `Last seen ${formatRelativeTime(device.last_seen_at)}`}
+                          : device.last_seen_at
+                            ? `Offline · Seen ${formatRelativeTime(device.last_seen_at)}`
+                            : 'Never connected'}
                       </span>
                     </div>
 
                     <div className="device-card-actions">
-                      <button onClick={() => navigate(`/devices/${device.id}`)} className="btn btn-primary">Runtime Monitor</button>
-                      <button onClick={() => navigate(`/devices/${device.id}/assign`)} className="btn btn-secondary">Assign Content</button>
+                      <button onClick={() => navigate(`/devices/${device.id}/assign`)} className="btn btn-primary">Assign Content</button>
+                      <button onClick={() => navigate(`/devices/${device.id}`)} className="btn btn-secondary">Runtime Monitor</button>
                     </div>
                   </>
                 )}

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Layout } from '../components/Layout';
 import { playlistApi, Playlist } from '../api/endpoints';
+import { ChevronRight, ListVideo, Plus } from 'lucide-react';
 
 export function Playlists() {
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
@@ -44,7 +45,10 @@ export function Playlists() {
   if (isLoading) {
     return (
       <Layout>
-        <div className="loading">Loading playlists...</div>
+        <div className="container">
+          <div className="page-heading"><div><h1>Playlists</h1><p>Sequence media for your frames.</p></div></div>
+          <div className="playlist-list" aria-label="Loading playlists">{[0, 1, 2].map((item) => <div className="playlist-row skeleton-card" key={item} />)}</div>
+        </div>
       </Layout>
     );
   }
@@ -52,17 +56,14 @@ export function Playlists() {
   return (
     <Layout>
       <div className="container">
-        <h1>Playlists</h1>
+        <div className="page-heading">
+          <div><h1>Playlists</h1><p>Sequence media for your frames.</p></div>
+          <button onClick={handleCreate} className="btn btn-primary" disabled={isCreating}>
+            <Plus size={17} aria-hidden="true" /> {isCreating ? 'Creating...' : 'Create Playlist'}
+          </button>
+        </div>
 
         {error && <p className="text-error">{error}</p>}
-
-        <button
-          onClick={handleCreate}
-          className="btn btn-primary mb-24"
-          disabled={isCreating}
-        >
-          {isCreating ? 'Creating...' : '+ Create Playlist'}
-        </button>
 
         {playlists.length === 0 ? (
           <div className="list-empty">
@@ -70,15 +71,16 @@ export function Playlists() {
             <p className="text-secondary">Create playlists to organize your media</p>
           </div>
         ) : (
-          <div className="gap-8">
+          <div className="playlist-list">
             {playlists.map((playlist) => (
               <div
                 key={playlist.id}
-                className="card card-clickable"
+                className="playlist-row card-clickable"
                 onClick={() => navigate(`/playlists/${playlist.id}`)}
               >
-                <h3 style={{ margin: 0 }}>{playlist.name}</h3>
-                <p className="text-secondary">{playlist.items.length} items</p>
+                <div className="playlist-cover"><ListVideo size={20} aria-hidden="true" /></div>
+                <div className="playlist-row-copy"><h3>{playlist.name}</h3><p>{playlist.items.length} {playlist.items.length === 1 ? 'item' : 'items'}</p></div>
+                <ChevronRight className="playlist-chevron" size={20} aria-hidden="true" />
               </div>
             ))}
           </div>
